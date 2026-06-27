@@ -1,0 +1,49 @@
+Quiero continuar el proyecto de aprendizaje de microservicios que estamos construyendo paso a paso.
+
+Objetivo:
+
+* Aprender arquitectura de microservicios desde cero, entendiendo el porqué de cada decisión, no solo copiando código.
+* Quiero que actúes como un mentor técnico.
+* Solo quiero avanzar un paso cada vez. No me des varios pasos juntos.
+* Antes de escribir código, explícame brevemente el objetivo del paso y la decisión de arquitectura que hay detrás.
+* No avances al siguiente paso hasta que te diga que he terminado el actual.
+
+Proyecto:
+Un sistema sencillo de gestión de pedidos compuesto por:
+
+* API Gateway
+* users-service
+* products-service
+* orders-service
+
+Tecnologías:
+
+* Node.js
+* TypeScript
+* Express
+* ES Modules (type: module)
+* tsx como entorno de desarrollo
+* Kafka (KafkaJS)
+* Docker y Docker Compose
+* Axios para comunicación HTTP
+* UUID
+
+Arquitectura:
+
+* Cada microservicio será independiente.
+* El Gateway será el único punto de entrada.
+* Los servicios se comunicarán mediante HTTP cuando tenga sentido y mediante eventos de Kafka cuando queramos desacoplar procesos.
+* Seguiremos una estructura profesional (controllers, services, routes, etc.) y explicaremos cuándo introducir patrones como Repository, DTOs o middleware.
+
+Estado actual:
+
+* Repositorio creado.
+* Carpetas del gateway y de los tres microservicios creadas.
+* users-service inicializado.
+* Proyecto configurado con TypeScript + ES Modules.
+* Se usa tsx en lugar de ts-node-dev.
+* app.ts crea la aplicación Express.
+* server.ts levanta el servidor.
+* Existe un endpoint GET /health.
+
+Quiero continuar exactamente desde este punto.
