@@ -1,49 +1,159 @@
 Quiero continuar el proyecto de aprendizaje de microservicios que estamos construyendo paso a paso.
 
-Objetivo:
+---
 
-* Aprender arquitectura de microservicios desde cero, entendiendo el porqué de cada decisión, no solo copiando código.
-* Quiero que actúes como un mentor técnico.
-* Solo quiero avanzar un paso cada vez. No me des varios pasos juntos.
-* Antes de escribir código, explícame brevemente el objetivo del paso y la decisión de arquitectura que hay detrás.
-* No avances al siguiente paso hasta que te diga que he terminado el actual.
+# 🎯 Objetivo
 
-Proyecto:
-Un sistema sencillo de gestión de pedidos compuesto por:
+- Aprender arquitectura de microservicios desde cero, entendiendo el porqué de cada decisión, no solo copiando código.
+- Quiero que actúes como un mentor técnico.
+- Solo quiero avanzar un paso cada vez.
+- No me des varios pasos juntos.
+- Antes de escribir código, explícame brevemente el objetivo del paso y la decisión de arquitectura detrás.
+- No avances al siguiente paso hasta que te diga que he terminado el actual.
+- Mantén un enfoque progresivo: introduce complejidad solo cuando sea necesaria.
 
-* API Gateway
-* users-service
-* products-service
-* orders-service
+---
 
-Tecnologías:
+# 🧱 Proyecto
 
-* Node.js
-* TypeScript
-* Express
-* ES Modules (type: module)
-* tsx como entorno de desarrollo
-* Kafka (KafkaJS)
-* Docker y Docker Compose
-* Axios para comunicación HTTP
-* UUID
+Sistema de gestión de pedidos basado en microservicios:
 
-Arquitectura:
+- API Gateway
+- users-service
+- products-service
+- orders-service
 
-* Cada microservicio será independiente.
-* El Gateway será el único punto de entrada.
-* Los servicios se comunicarán mediante HTTP cuando tenga sentido y mediante eventos de Kafka cuando queramos desacoplar procesos.
-* Seguiremos una estructura profesional (controllers, services, routes, etc.) y explicaremos cuándo introducir patrones como Repository, DTOs o middleware.
+---
 
-Estado actual:
+# 🛠️ Tecnologías
 
-* Repositorio creado.
-* Carpetas del gateway y de los tres microservicios creadas.
-* users-service inicializado.
-* Proyecto configurado con TypeScript + ES Modules.
-* Se usa tsx en lugar de ts-node-dev.
-* app.ts crea la aplicación Express.
-* server.ts levanta el servidor.
-* Existe un endpoint GET /health.
+- Node.js
+- TypeScript
+- Express
+- ES Modules (type: module)
+- tsx (dev runtime)
+- Kafka (KafkaJS)
+- Docker & Docker Compose
+- Axios (comunicación HTTP entre servicios)
+- UUID
 
-Quiero continuar exactamente desde este punto.
+---
+
+# 🧠 Arquitectura objetivo
+
+- Cada microservicio es completamente independiente.
+- El API Gateway es el único punto de entrada externo.
+- Comunicación:
+  - HTTP para consultas síncronas
+  - Kafka para eventos desacoplados
+- Estructura por capas en cada servicio:
+  - routes → controllers → services
+- Se introducirán progresivamente patrones como:
+  - DTOs
+  - Middleware
+  - Error handling centralizado
+  - Repository pattern
+  - Event-driven architecture con Kafka
+
+---
+
+# 📦 Estado actual del proyecto
+
+Estamos trabajando en el users-service.
+
+## Estado general:
+
+- Repositorio creado
+- Estructura base de microservicios creada:
+  - API Gateway
+  - users-service
+  - products-service
+  - orders-service
+- users-service inicializado con:
+  - Express
+  - TypeScript + ES Modules
+  - tsx como runtime de desarrollo
+- Arquitectura interna aplicada:
+  - app.ts configura Express
+  - server.ts levanta el servidor
+  - routes / controllers / services separados
+
+---
+
+## Funcionalidad actual del users-service
+
+### Endpoints existentes:
+
+- GET /health → health check del servicio
+- POST /users → crear usuario
+- GET /users → obtener todos los usuarios
+- GET /users/:id → obtener usuario por ID
+
+---
+
+## Modelo de dominio
+
+```ts
+User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+CreateUserDto {
+  name: string;
+  email: string;
+}
+```
+
+---
+
+## Estado de la lógica
+
+- Usuarios almacenados en memoria (users: User[])
+- UUID usado para generación de IDs
+- Validación básica implementada con middleware:
+  - validateCreateUser
+- Flujo actual:
+  request → middleware → controller → service → response
+
+---
+
+## Buenas prácticas ya aplicadas
+
+- Separación estricta de capas
+- Services sin conocimiento de HTTP
+- Controllers como capa de adaptación HTTP
+- Middleware para validación básica
+- Uso inicial de TypeScript para contratos
+
+---
+
+# 🚀 Punto de continuación
+
+Estamos en este punto:
+
+- CRUD básico de usuarios implementado en memoria
+- Validación básica de entrada implementada
+- Arquitectura limpia por capas establecida
+
+---
+
+# ➡️ Siguiente fase (NO empezar hasta indicarlo)
+
+El siguiente tema será:
+
+- Manejo centralizado de errores en Express
+- Introducción de error handling middleware
+- Lanzar errores desde services en lugar de manejar todo en controllers
+- Evolución hacia arquitectura preparada para eventos (Kafka más adelante)
+
+---
+
+# 📌 Instrucciones de comportamiento del mentor
+
+- Dar un solo paso por respuesta
+- Explicar primero el objetivo y la decisión arquitectónica
+- No escribir código hasta que se entienda el paso
+- No avanzar hasta confirmación explícita del paso anterior
+- Mantener enfoque incremental y evitar sobre-ingeniería
