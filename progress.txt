@@ -1,20 +1,23 @@
-Quiero continuar el proyecto de aprendizaje de microservicios que estamos construyendo paso a paso.
+Quiero continuar un proyecto de aprendizaje de microservicios que estamos construyendo paso a paso.
 
----
+ROL Y FORMA DE TRABAJO
 
-# 🎯 Objetivo
+Actúa como mi mentor técnico.
 
-- Aprender arquitectura de microservicios desde cero, entendiendo el porqué de cada decisión, no solo copiando código.
-- Quiero que actúes como un mentor técnico.
-- Solo quiero avanzar un paso cada vez.
-- No me des varios pasos juntos.
-- Antes de escribir código, explícame brevemente el objetivo del paso y la decisión de arquitectura detrás.
-- No avances al siguiente paso hasta que te diga que he terminado el actual.
-- Mantén un enfoque progresivo: introduce complejidad solo cuando sea necesaria.
+Objetivo:
+- Aprender arquitectura de microservicios desde cero entendiendo el porqué de cada decisión.
+- No quiero simplemente copiar código.
+- Quiero avanzar de forma incremental.
+- Solo un paso por respuesta.
+- No avances al siguiente paso hasta que confirme que he terminado el actual.
+- Antes de escribir código, explica brevemente:
+  - cuál es el objetivo del paso.
+  - qué problema resuelve.
+  - qué decisión arquitectónica estamos tomando y por qué.
+- Introduce complejidad únicamente cuando sea necesaria.
+- Evita sobre-ingeniería.
 
----
-
-# 🧱 Proyecto
+PROYECTO
 
 Sistema de gestión de pedidos basado en microservicios:
 
@@ -23,77 +26,95 @@ Sistema de gestión de pedidos basado en microservicios:
 - products-service
 - orders-service
 
----
-
-# 🛠️ Tecnologías
+Tecnologías:
 
 - Node.js
 - TypeScript
 - Express
-- ES Modules (type: module)
-- tsx (dev runtime)
-- Kafka (KafkaJS)
-- Docker & Docker Compose
-- Axios (comunicación HTTP entre servicios)
-- UUID
+- ES Modules (`type: module`)
+- tsx como runtime de desarrollo
+- Kafka (KafkaJS) para eventos
+- Docker y Docker Compose
+- Axios para comunicación HTTP entre servicios
+- UUID para generación de IDs
 
----
+ARQUITECTURA OBJETIVO
 
-# 🧠 Arquitectura objetivo
+Cada microservicio debe ser independiente.
 
-- Cada microservicio es completamente independiente.
-- El API Gateway es el único punto de entrada externo.
-- Comunicación:
-  - HTTP para consultas síncronas
-  - Kafka para eventos desacoplados
-- Estructura por capas en cada servicio:
-  - routes → controllers → services
-- Se introducirán progresivamente patrones como:
-  - DTOs
-  - Middleware
-  - Error handling centralizado
-  - Repository pattern
-  - Event-driven architecture con Kafka
+El API Gateway será el único punto de entrada externo.
 
----
+Comunicación:
+- HTTP para consultas síncronas.
+- Kafka para eventos desacoplados.
 
-# 📦 Estado actual del proyecto
+Estructura por capas:
 
-Estamos trabajando en el users-service.
+- routes
+- controllers
+- services
 
-## Estado general:
+Patrones que se introducirán progresivamente:
 
-- Repositorio creado
-- Estructura base de microservicios creada:
-  - API Gateway
-  - users-service
-  - products-service
-  - orders-service
-- users-service inicializado con:
-  - Express
-  - TypeScript + ES Modules
-  - tsx como runtime de desarrollo
-- Arquitectura interna aplicada:
-  - app.ts configura Express
-  - server.ts levanta el servidor
-  - routes / controllers / services separados
+- DTOs
+- Middleware
+- Error handling centralizado
+- Repository pattern
+- Event-driven architecture con Kafka
 
----
+ESTADO ACTUAL DEL PROYECTO
 
-## Funcionalidad actual del users-service
+Estamos trabajando únicamente en users-service.
 
-### Endpoints existentes:
+La estructura base del repositorio ya existe:
 
-- GET /health → health check del servicio
-- POST /users → crear usuario
-- GET /users → obtener todos los usuarios
-- GET /users/:id → obtener usuario por ID
+- api-gateway
+- users-service
+- products-service
+- orders-service
 
----
+users-service está configurado con:
 
-## Modelo de dominio
+- Express
+- TypeScript
+- ES Modules
+- tsx
+- separación entre:
 
-```ts
+src/
+├── routes/
+├── controllers/
+├── services/
+├── middlewares/
+├── errors/
+└── utils/
+
+Arquitectura actual:
+
+request
+ ↓
+routes
+ ↓
+middlewares
+ ↓
+controllers
+ ↓
+services
+ ↓
+response
+
+FUNCIONALIDAD IMPLEMENTADA
+
+Endpoints:
+
+GET /health
+
+POST /users
+GET /users
+GET /users/:id
+
+Modelo:
+
 User {
   id: string;
   name: string;
@@ -104,56 +125,214 @@ CreateUserDto {
   name: string;
   email: string;
 }
-```
 
----
+Los usuarios todavía se almacenan en memoria:
 
-## Estado de la lógica
+const users: User[] = []
 
-- Usuarios almacenados en memoria (users: User[])
-- UUID usado para generación de IDs
-- Validación básica implementada con middleware:
-  - validateCreateUser
-- Flujo actual:
-  request → middleware → controller → service → response
+UUID usado para generar IDs.
 
----
+VALIDACIÓN ACTUAL
 
-## Buenas prácticas ya aplicadas
+Existe middleware:
 
-- Separación estricta de capas
-- Services sin conocimiento de HTTP
-- Controllers como capa de adaptación HTTP
-- Middleware para validación básica
-- Uso inicial de TypeScript para contratos
+validateCreateUser
 
----
+para validar creación de usuarios.
 
-# 🚀 Punto de continuación
+Flujo:
 
-Estamos en este punto:
+request
+ ↓
+validateCreateUser
+ ↓
+controller
+ ↓
+service
+ ↓
+response
 
-- CRUD básico de usuarios implementado en memoria
-- Validación básica de entrada implementada
-- Arquitectura limpia por capas establecida
+MANEJO DE ERRORES IMPLEMENTADO
 
----
+Se ha introducido un sistema básico de errores personalizados.
 
-# ➡️ Siguiente fase (NO empezar hasta indicarlo)
+Estructura:
 
-El siguiente tema será:
+src/errors/
 
-- Manejo centralizado de errores en Express
-- Introducción de error handling middleware
-- Lanzar errores desde services en lugar de manejar todo en controllers
-- Evolución hacia arquitectura preparada para eventos (Kafka más adelante)
+AppError.ts
+NotFoundError.ts
 
----
+Concepto:
 
-# 📌 Instrucciones de comportamiento del mentor
+- AppError hereda de Error.
+- Tiene:
+  - message
+  - statusCode
 
-- Dar un solo paso por respuesta
-- Explicar primero el objetivo y la decisión arquitectónica
-- No escribir código hasta que se entienda el paso
-- No avanzar hasta confirmación explícita del paso anterior
-- Mantener enfoque incremental y evitar sobre-ingeniería
+- NotFoundError hereda de AppError.
+- Usa statusCode 404.
+
+Ejemplo:
+
+throw new NotFoundError("User not found")
+
+ERROR HANDLER GLOBAL
+
+Existe:
+
+src/middlewares/errorHandler.ts
+
+Está registrado al final de app.ts.
+
+Responsabilidad:
+
+- Si recibe un AppError:
+  - devuelve su statusCode.
+  - devuelve su message.
+
+- Si recibe un error desconocido:
+  - devuelve 500.
+
+Flujo:
+
+throw AppError
+      ↓
+errorHandler
+      ↓
+HTTP response
+
+CAMBIO IMPORTANTE REALIZADO
+
+Antes:
+
+El controller decidía errores:
+
+if (!user) {
+  return res.status(404)
+}
+
+Ahora:
+
+El service decide:
+
+export function getUserById(id: string): User {
+  const user = users.find(user => user.id === id)
+
+  if (!user) {
+    throw new NotFoundError("User not found")
+  }
+
+  return user
+}
+
+Los controllers ya no conocen reglas de negocio.
+
+ASYNC ERROR HANDLING INTRODUCIDO
+
+Se creó:
+
+src/utils/asyncHandler.ts
+
+Implementación actual:
+
+import type { RequestHandler } from "express";
+
+export function asyncHandler(fn: RequestHandler): RequestHandler {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
+Motivo:
+
+Preparar Express para controllers async y errores provenientes de Promises.
+
+ESTADO ACTUAL DE RUTAS
+
+users.routes.ts:
+
+router.post(
+  '/users',
+  validateCreateUser,
+  asyncHandler(createNewUser)
+)
+
+router.get(
+  '/users',
+  asyncHandler(getAllUsers)
+)
+
+router.get(
+  '/users/:id',
+  asyncHandler(getUser)
+)
+
+Decisión tomada:
+
+- Envolver controllers desde las rutas.
+- No envolver los controllers internamente.
+
+Motivo:
+
+La adaptación a Express debe quedarse en la capa HTTP.
+
+ESTADO ACTUAL DE CONTROLLERS
+
+Ejemplo:
+
+export async function getUser(
+  req: Request,
+  res: Response
+) {
+  const id = req.params.id as string
+
+  const user = getUserById(id)
+
+  res.json(user)
+}
+
+Actualmente son async, aunque todavía no usan await.
+
+La intención es prepararlos para cuando los services sean realmente asíncronos.
+
+PUNTO EXACTO DONDE CONTINUAR
+
+El último tema tratado fue:
+
+"Manejo de errores async en Express mediante asyncHandler"
+
+Ya está implementado.
+
+Antes de continuar se debe verificar:
+
+1. GET /users funciona.
+2. GET /users/:id con un usuario inexistente devuelve:
+
+{
+  "message": "User not found"
+}
+
+con HTTP 404.
+
+PRÓXIMO BLOQUE PREVISTO
+
+Después de confirmar que todo funciona, continuar con el siguiente paso arquitectónico:
+
+Introducir persistencia más realista.
+
+Probablemente:
+
+- Extraer acceso a datos fuera del service.
+- Introducir Repository Pattern.
+- Sustituir el array en memoria por una abstracción de repositorio.
+
+Pero no avances automáticamente.
+
+Primero explica el objetivo del siguiente paso y la decisión arquitectónica antes de escribir código.
+
+Mantén siempre el enfoque:
+
+- Un paso cada vez.
+- Explicar antes de implementar.
+- No saltar fases.
