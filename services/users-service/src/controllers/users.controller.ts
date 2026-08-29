@@ -1,35 +1,28 @@
-import type { NextFunction, Request, Response } from "express";
-import {
-  createUser,
-  getUserById,
-  getUsers,
-} from "../services/users.service.js";
+import type { Request, Response } from "express";
+import type { UsersService } from "../services/users.service.js";
 import type { CreateUserDto, User } from "../types/user.js";
 
-export async function createNewUser(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  const userData: CreateUserDto = req.body;
-  const newUser = createUser(userData);
+export class UsersController {
+  constructor(private usersService: UsersService) {}
 
-  res.status(201).json(newUser);
-}
+  async createNewUser(req: Request, res: Response) {
+    const userData: CreateUserDto = req.body;
+    const newUser = this.usersService.createUser(userData);
 
-export async function getAllUsers(
-  _req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  const users: User[] = getUsers();
-  res.json(users);
-}
+    res.status(201).json(newUser);
+  }
 
-export async function getUser(req: Request, res: Response, next: NextFunction) {
-  const id = req.params.id as string;
+  async getAllUsers(_req: Request, res: Response) {
+    const users: User[] = this.usersService.getUsers();
 
-  const user = getUserById(id);
+    res.json(users);
+  }
 
-  res.json(user);
+  async getUser(req: Request, res: Response) {
+    const id = req.params.id as string;
+
+    const user = this.usersService.getUserById(id);
+
+    res.json(user);
+  }
 }

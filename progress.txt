@@ -11,30 +11,56 @@ Objetivo:
 - Solo un paso por respuesta.
 - No avances al siguiente paso hasta que confirme que he terminado el actual.
 - Antes de escribir código, explica brevemente:
-  - cuál es el objetivo del paso.
-  - qué problema resuelve.
+  - cuál es el objetivo del paso;
+  - qué problema resuelve;
   - qué decisión arquitectónica estamos tomando y por qué.
 - Introduce complejidad únicamente cuando sea necesaria.
 - Evita sobre-ingeniería.
+- Si existe más de una solución razonable, explica brevemente las alternativas y recomienda una para este proyecto.
+- No conviertas algo en clase, patrón o abstracción simplemente porque sea posible; debe existir una razón arquitectónica clara.
+- Quiero entender los conceptos, no solamente obtener código.
+
+REGLAS IMPORTANTES DE TRABAJO
+
+- Un solo paso cada vez.
+- Primero explicar, después implementar.
+- No saltar fases.
+- Después de implementar un paso, comprobar que funciona antes de continuar.
+- Si detectas restos de una implementación anterior, señálalos antes de avanzar.
+- Mantén el proyecto deliberadamente sencillo mientras no necesitemos más complejidad.
+- No hagas cambios adicionales que no formen parte del paso actual.
+- Si una decisión puede esperar hasta que exista una necesidad real, no la anticipes.
+- Quiero participar en las decisiones. Siempre que sea razonable, hazme pensar primero antes de darme la solución.
+- Si te pido directamente la solución, puedes proporcionármela, pero explica antes por qué es la solución elegida.
 
 PROYECTO
 
-Sistema de gestión de pedidos basado en microservicios:
+Sistema de gestión de pedidos basado en microservicios.
 
-- API Gateway
-- users-service
-- products-service
-- orders-service
+Estructura del repositorio:
 
-Tecnologías:
+api-gateway
+users-service
+products-service
+orders-service
+
+Microservicios objetivo:
+
+API Gateway
+users-service
+products-service
+orders-service
+
+TECNOLOGÍAS
 
 - Node.js
 - TypeScript
 - Express
-- ES Modules (`type: module`)
+- ES Modules ("type": "module")
 - tsx como runtime de desarrollo
-- Kafka (KafkaJS) para eventos
-- Docker y Docker Compose
+- Kafka / KafkaJS para eventos
+- Docker
+- Docker Compose
 - Axios para comunicación HTTP entre servicios
 - UUID para generación de IDs
 
@@ -50,46 +76,36 @@ Comunicación:
 
 Estructura por capas:
 
-- routes
-- controllers
-- services
+routes
+controllers
+services
 
-Patrones que se introducirán progresivamente:
+Patrones que se introducirán progresivamente y solo cuando sean necesarios:
 
 - DTOs
 - Middleware
 - Error handling centralizado
-- Repository pattern
+- Repository Pattern
 - Event-driven architecture con Kafka
 
-ESTADO ACTUAL DEL PROYECTO
+ESTADO GENERAL DEL PROYECTO
 
-Estamos trabajando únicamente en users-service.
+Actualmente estamos trabajando únicamente en users-service.
 
-La estructura base del repositorio ya existe:
+Los demás microservicios todavía no son el foco.
 
-- api-gateway
-- users-service
-- products-service
-- orders-service
-
-users-service está configurado con:
-
-- Express
-- TypeScript
-- ES Modules
-- tsx
-- separación entre:
+Estructura actual de users-service:
 
 src/
 ├── routes/
 ├── controllers/
 ├── services/
+├── repositories/
 ├── middlewares/
 ├── errors/
 └── utils/
 
-Arquitectura actual:
+La arquitectura actual es:
 
 request
  ↓
@@ -101,14 +117,17 @@ controllers
  ↓
 services
  ↓
-response
+repositories
+ ↓
+persistence
 
-FUNCIONALIDAD IMPLEMENTADA
+Actualmente la persistencia sigue siendo en memoria.
+
+FUNCIONALIDAD ACTUAL DE users-service
 
 Endpoints:
 
 GET /health
-
 POST /users
 GET /users
 GET /users/:id
@@ -121,26 +140,27 @@ User {
   email: string;
 }
 
+DTO:
+
 CreateUserDto {
   name: string;
   email: string;
 }
 
-Los usuarios todavía se almacenan en memoria:
+Los usuarios siguen almacenándose en memoria mediante un User[] dentro de la implementación InMemoryUserRepository.
 
-const users: User[] = []
+Los IDs se generan actualmente con randomUUID() en el service.
 
-UUID usado para generar IDs.
-
-VALIDACIÓN ACTUAL
+VALIDACIÓN
 
 Existe middleware:
 
-validateCreateUser
+src/middlewares/validateCreateUser.ts
 
-para validar creación de usuarios.
+Responsabilidad:
+- validar los datos necesarios para crear un usuario.
 
-Flujo:
+Flujo de creación:
 
 request
  ↓
@@ -150,32 +170,30 @@ controller
  ↓
 service
  ↓
+repository
+ ↓
 response
 
-MANEJO DE ERRORES IMPLEMENTADO
+MANEJO DE ERRORES
 
-Se ha introducido un sistema básico de errores personalizados.
-
-Estructura:
+Existe:
 
 src/errors/
+├── AppError.ts
+└── NotFoundError.ts
 
-AppError.ts
-NotFoundError.ts
+AppError:
+- hereda de Error;
+- contiene message;
+- contiene statusCode.
 
-Concepto:
-
-- AppError hereda de Error.
-- Tiene:
-  - message
-  - statusCode
-
-- NotFoundError hereda de AppError.
-- Usa statusCode 404.
+NotFoundError:
+- hereda de AppError;
+- utiliza HTTP 404.
 
 Ejemplo:
 
-throw new NotFoundError("User not found")
+throw new NotFoundError("User not found");
 
 ERROR HANDLER GLOBAL
 
@@ -186,51 +204,25 @@ src/middlewares/errorHandler.ts
 Está registrado al final de app.ts.
 
 Responsabilidad:
-
 - Si recibe un AppError:
-  - devuelve su statusCode.
+  - devuelve su statusCode;
   - devuelve su message.
-
 - Si recibe un error desconocido:
-  - devuelve 500.
+  - devuelve HTTP 500.
 
 Flujo:
 
 throw AppError
-      ↓
+ ↓
+asyncHandler
+ ↓
 errorHandler
-      ↓
+ ↓
 HTTP response
 
-CAMBIO IMPORTANTE REALIZADO
+ASYNC ERROR HANDLING
 
-Antes:
-
-El controller decidía errores:
-
-if (!user) {
-  return res.status(404)
-}
-
-Ahora:
-
-El service decide:
-
-export function getUserById(id: string): User {
-  const user = users.find(user => user.id === id)
-
-  if (!user) {
-    throw new NotFoundError("User not found")
-  }
-
-  return user
-}
-
-Los controllers ya no conocen reglas de negocio.
-
-ASYNC ERROR HANDLING INTRODUCIDO
-
-Se creó:
+Existe:
 
 src/utils/asyncHandler.ts
 
@@ -245,94 +237,636 @@ export function asyncHandler(fn: RequestHandler): RequestHandler {
 }
 
 Motivo:
+- preparar Express para controllers async y errores provenientes de Promises.
 
-Preparar Express para controllers async y errores provenientes de Promises.
+Decisión:
+- Los controllers se envuelven desde las rutas.
+- No se envuelven internamente.
+- La adaptación a Express pertenece a la capa HTTP.
 
-ESTADO ACTUAL DE RUTAS
+REPOSITORY PATTERN
 
-users.routes.ts:
+El cambio arquitectónico más reciente ha sido introducir Repository Pattern.
 
-router.post(
-  '/users',
-  validateCreateUser,
-  asyncHandler(createNewUser)
-)
+Antes:
 
-router.get(
-  '/users',
-  asyncHandler(getAllUsers)
-)
+Controller
+ ↓
+Service
+ ↓
+users[]
 
-router.get(
-  '/users/:id',
-  asyncHandler(getUser)
-)
+Ahora:
 
-Decisión tomada:
+Controller
+ ↓
+Service
+ ↓
+UserRepository
+ ↓
+InMemoryUserRepository
+ ↓
+users[]
 
-- Envolver controllers desde las rutas.
-- No envolver los controllers internamente.
+Objetivo:
+- separar las reglas de negocio del acceso a datos.
+
+El UsersService ya NO debe conocer directamente el array donde se almacenan los usuarios.
+
+USER REPOSITORY
+
+Existe:
+
+src/repositories/UserRepository.ts
+
+Contrato actual:
+
+export interface UserRepository {
+  save(user: User): User;
+  findAll(): User[];
+  findById(id: string): User | undefined;
+}
+
+DECISIONES SOBRE EL CONTRATO DEL REPOSITORY
+
+save recibe un User, no un CreateUserDto.
+
+Motivo:
+- CreateUserDto representa datos provenientes de HTTP.
+- User representa la entidad que el service ha construido.
+- El repository se ocupa de persistir la entidad.
+- El repository no debe depender de conceptos HTTP/DTO.
+
+Actualmente el service genera el UUID y construye el User.
+
+Flujo:
+
+CreateUserDto
+ ↓
+Service
+ ↓
+User + UUID
+ ↓
+Repository.save(User)
+
+No hemos decidido todavía si en una futura base de datos el ID seguirá siendo generado por el service o por la base de datos.
+
+No anticipar esa decisión todavía.
+
+findById devuelve:
+
+User | undefined
+
+Motivo:
+- que un usuario no exista no es necesariamente un error de persistencia;
+- el repository informa de que no existe;
+- el service decide que eso constituye un error de negocio.
+
+Flujo:
+
+Repository
+ ↓
+undefined
+ ↓
+Service
+ ↓
+NotFoundError
+
+El repository NO conoce HTTP ni 404.
+
+ERRORES DE PERSISTENCIA
+
+No queremos utilizar undefined, null o never como mecanismo genérico de error para save.
+
+La decisión actual es:
+
+save()
+ ├── éxito → User
+ └── error → throw error
+
+never no es un tipo apropiado para representar un posible fallo de persistencia.
+
+IN-MEMORY REPOSITORY
+
+Existe:
+
+src/repositories/InMemoryUserRepository.ts
+
+Implementa:
+
+UserRepository
+
+La implementación actual es:
+
+export class InMemoryUserRepository implements UserRepository {
+  constructor(private users: User[] = []) {}
+
+  save(user: User): User {
+    this.users.push(user);
+    return user;
+  }
+
+  findAll(): User[] {
+    return [...this.users];
+  }
+
+  findById(id: string): User | undefined {
+    return this.users.find((user) => user.id === id);
+  }
+}
+
+CONSTRUCTOR DEL IN-MEMORY REPOSITORY
+
+Se utiliza:
+
+constructor(private users: User[] = []) {}
+
+No hace falta:
+
+constructor(private users: User[] = []) {
+  this.users = users;
+}
+
+porque TypeScript ya realiza la asignación mediante parameter property.
+
+Permite:
+
+new InMemoryUserRepository()
+
+para empezar vacío.
+
+También permite proporcionar usuarios iniciales:
+
+new InMemoryUserRepository(initialUsers)
+
+Esto puede ser útil para tests.
+
+ENCAPSULACIÓN DEL IN-MEMORY REPOSITORY
+
+No devolvemos directamente:
+
+return this.users;
+
+sino:
+
+return [...this.users];
 
 Motivo:
 
-La adaptación a Express debe quedarse en la capa HTTP.
+Evitar que código externo pueda modificar directamente el array interno mediante:
 
-ESTADO ACTUAL DE CONTROLLERS
+repository.findAll().push(user);
 
-Ejemplo:
+Con la copia superficial, esa operación modifica únicamente la copia.
 
-export async function getUser(
-  req: Request,
-  res: Response
-) {
-  const id = req.params.id as string
+Actualmente NO hemos introducido copia profunda de los objetos User.
 
-  const user = getUserById(id)
+Decisión:
+- no añadir complejidad adicional mientras no sea necesaria.
 
-  res.json(user)
+USERS SERVICE
+
+UsersService anteriormente era un conjunto de funciones.
+
+Se decidió convertirlo en clase porque ahora tiene una dependencia que necesita conservar:
+
+UsersService
+ ↓
+UserRepository
+
+Implementación actual:
+
+import { randomUUID } from "node:crypto";
+
+import { NotFoundError } from "../errors/NotFoundError.js";
+import type { UserRepository } from "../repositories/UserRepository.js";
+import type { CreateUserDto, User } from "../types/user.js";
+
+export class UsersService {
+  constructor(private userRepository: UserRepository) {}
+
+  createUser(userData: CreateUserDto): User {
+    const newId = randomUUID();
+
+    const newUser = {
+      id: newId,
+      ...userData,
+    };
+
+    return this.userRepository.save(newUser);
+  }
+
+  getUsers(): User[] {
+    return this.userRepository.findAll();
+  }
+
+  getUserById(id: string): User {
+    const user = this.userRepository.findById(id);
+
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    return user;
+  }
 }
 
-Actualmente son async, aunque todavía no usan await.
+IMPORTANTE SOBRE EL SERVICE
 
-La intención es prepararlos para cuando los services sean realmente asíncronos.
+El antiguo:
+
+const users: User[] = [];
+
+que existía en el service fue eliminado.
+
+El service no debe tener su propio almacenamiento.
+
+Responsabilidades actuales del service:
+- generar UUID;
+- construir el User;
+- aplicar reglas de negocio;
+- decidir que un usuario inexistente implica NotFoundError;
+- delegar persistencia al repository.
+
+No debe:
+- conocer arrays internos del repository;
+- conocer HTTP;
+- devolver respuestas Express;
+- gestionar res.status(...).
+
+USERS CONTROLLER
+
+Ahora es una clase:
+
+src/controllers/users.controller.ts
+
+Implementación actual:
+
+import type { Request, Response } from "express";
+import type { UsersService } from "../services/users.service.js";
+import type { CreateUserDto, User } from "../types/user.js";
+
+export class UsersController {
+  constructor(private usersService: UsersService) {}
+
+  async createNewUser(req: Request, res: Response) {
+    const userData: CreateUserDto = req.body;
+
+    const newUser = this.usersService.createUser(userData);
+
+    res.status(201).json(newUser);
+  }
+
+  async getAllUsers(_req: Request, res: Response) {
+    const users: User[] = this.usersService.getUsers();
+
+    res.json(users);
+  }
+
+  async getUser(req: Request, res: Response) {
+    const id = req.params.id as string;
+
+    const user = this.usersService.getUserById(id);
+
+    res.json(user);
+  }
+}
+
+MOTIVO DE CONVERTIR EL CONTROLLER EN CLASE
+
+Queríamos expresar explícitamente su dependencia:
+
+constructor(private usersService: UsersService) {}
+
+No se decidió que los controllers deban ser clases como regla general.
+
+Fue una decisión pragmática para este proyecto porque el controller necesita conservar una dependencia.
+
+El controller:
+- conoce Express;
+- recibe Request;
+- genera respuestas HTTP;
+- delega la lógica al service.
+
+No conoce:
+- repositories;
+- arrays;
+- persistencia;
+- UUID;
+- reglas de almacenamiento.
+
+USERS ROUTES
+
+Ya no exportamos directamente un Router.
+
+Existe:
+
+src/routes/users.routes.ts
+
+Exporta:
+
+createUsersRoutes(usersController)
+
+Implementación actual:
+
+import { Router } from "express";
+
+import type { UsersController } from "../controllers/users.controller.js";
+import { validateCreateUser } from "../middlewares/validateCreateUser.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+
+export function createUsersRoutes(usersController: UsersController) {
+  const router = Router();
+
+  router.post(
+    "/users",
+    validateCreateUser,
+    asyncHandler(usersController.createNewUser.bind(usersController)),
+  );
+
+  router.get(
+    "/users",
+    asyncHandler(usersController.getAllUsers.bind(usersController)),
+  );
+
+  router.get(
+    "/users/:id",
+    asyncHandler(usersController.getUser.bind(usersController)),
+  );
+
+  return router;
+}
+
+BIND EN LAS RUTAS
+
+Usamos:
+
+usersController.getUser.bind(usersController)
+
+porque Express recibe una referencia al método y puede ejecutarlo sin el contexto original de la instancia.
+
+bind garantiza que:
+
+this
+
+siga apuntando al UsersController.
+
+No hemos introducido otras técnicas de binding.
+
+APP.TS / COMPOSITION ROOT
+
+app.ts es actualmente el punto donde ensamblamos las dependencias.
+
+Implementación actual:
+
+import express from "express";
+
+import { UsersController } from "./controllers/users.controller.js";
+import { errorHandler } from "./middlewares/errorHandler.js";
+import { InMemoryUserRepository } from "./repositories/InMemoryUserRepository.js";
+import type { UserRepository } from "./repositories/UserRepository.js";
+import healthRoutes from "./routes/health.routes.js";
+import { createUsersRoutes } from "./routes/users.routes.js";
+import { UsersService } from "./services/users.service.js";
+
+const app = express();
+
+app.use(express.json());
+
+app.use(healthRoutes);
+
+const userRepository: UserRepository = new InMemoryUserRepository();
+const usersService = new UsersService(userRepository);
+const usersController = new UsersController(usersService);
+
+app.use(createUsersRoutes(usersController));
+
+app.use(errorHandler);
+
+export default app;
+
+app.ts actúa como Composition Root.
+
+La aplicación decide aquí qué implementación concreta utilizar:
+
+InMemoryUserRepository
+ ↓
+UsersService
+ ↓
+UsersController
+ ↓
+createUsersRoutes
+ ↓
+Express
+
+La línea:
+
+const userRepository: UserRepository = new InMemoryUserRepository();
+
+hace explícito que la variable está tipada mediante la abstracción UserRepository, aunque la implementación concreta sea InMemoryUserRepository.
+
+Decisión:
+- no utilizar todavía un framework o contenedor de Dependency Injection;
+- la Dependency Injection es manual;
+- no introducir factories o contenedores mientras no sean necesarios.
+
+FLUJO ACTUAL COMPLETO
+
+Para una petición normal:
+
+HTTP request
+ ↓
+Express
+ ↓
+Route
+ ↓
+validateCreateUser (cuando corresponde)
+ ↓
+asyncHandler
+ ↓
+UsersController
+ ↓
+UsersService
+ ↓
+UserRepository
+ ↓
+InMemoryUserRepository
+ ↓
+User[]
+
+Para un usuario inexistente:
+
+GET /users/:id
+ ↓
+Route
+ ↓
+asyncHandler
+ ↓
+UsersController
+ ↓
+UsersService
+ ↓
+UserRepository.findById()
+ ↓
+undefined
+ ↓
+UsersService
+ ↓
+NotFoundError("User not found")
+ ↓
+asyncHandler.catch(next)
+ ↓
+errorHandler
+ ↓
+HTTP 404
+
+VERIFICACIONES REALIZADAS
+
+Se ha comprobado que:
+- GET /users funciona.
+- GET /users devuelve [] inicialmente.
+- POST /users crea usuarios correctamente.
+- GET /users devuelve los usuarios creados.
+- GET /users/:id devuelve usuarios existentes.
+- GET /users/abc devuelve {"message":"User not found"} con HTTP 404.
+
+También se comprobó que la refactorización a:
+
+Routes
+ ↓
+Controller
+ ↓
+Service
+ ↓
+Repository
+
+no cambió el comportamiento externo de la API.
+
+ESTADO ACTUAL
+
+La refactorización de users-service a:
+
+Routes
+ ↓
+Controller
+ ↓
+Service
+ ↓
+Repository
+ ↓
+InMemoryUserRepository
+
+está terminada.
+
+Todo funciona correctamente.
+
+Se ha comprobado que todos los endpoints de usuarios siguen devolviendo las respuestas esperadas.
+
+El cambio final realizado antes de guardar este contexto fue eliminar el antiguo array:
+
+const users: User[] = [];
+
+de users.service.ts, porque el almacenamiento ahora pertenece exclusivamente a InMemoryUserRepository.
+
+DECISIONES ARQUITECTÓNICAS YA TOMADAS
+
+No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una razón nueva:
+
+1. El service utiliza Repository Pattern.
+2. El repository se define mediante una interfaz.
+3. InMemoryUserRepository es la implementación actual.
+4. UsersService depende de UserRepository, no de InMemoryUserRepository.
+5. UsersController depende de UsersService.
+6. app.ts actúa como Composition Root.
+7. Dependency Injection se hace manualmente.
+8. No se utiliza ningún contenedor DI.
+9. Los controllers se adaptan a Express mediante asyncHandler desde las rutas.
+10. Los controllers son async para preparar la futura persistencia asíncrona.
+11. findById devuelve User | undefined.
+12. El service transforma un usuario inexistente en NotFoundError.
+13. Los repositories no conocen HTTP.
+14. El service no conoce Express.
+15. El DTO pertenece al límite de entrada de la aplicación; el repository trabaja con User.
+16. El almacenamiento sigue siendo un array en memoria.
+17. No introducir PostgreSQL, Docker, Kafka, factories, DI containers ni otras abstracciones hasta que sean necesarias.
+18. No añadir complejidad de encapsulación adicional, como deep cloning, mientras no exista una necesidad real.
+19. No convertir clases o funciones simplemente por seguir un patrón; las decisiones deben responder a una necesidad concreta.
+20. El controller se ha convertido en clase porque necesita conservar su dependencia con UsersService.
+21. Las rutas reciben el controller mediante createUsersRoutes(usersController).
+22. app.ts construye manualmente las dependencias.
+23. bind se realiza en las rutas y no dentro del controller.
+24. El repository trabaja con User, no con CreateUserDto.
+25. Los errores de negocio, como usuario no encontrado, se deciden en el service y no en el repository.
+26. La API externa no debe cambiar como consecuencia de refactorizaciones internas salvo que se decida explícitamente.
 
 PUNTO EXACTO DONDE CONTINUAR
 
-El último tema tratado fue:
+El bloque de Repository Pattern + Dependency Injection manual está terminado.
 
-"Manejo de errores async en Express mediante asyncHandler"
+El código funciona.
 
-Ya está implementado.
+El proyecto se deja deliberadamente en este estado por ahora.
 
-Antes de continuar se debe verificar:
+El siguiente bloque previsto es estudiar cómo cambiar el repository para una persistencia real.
 
-1. GET /users funciona.
-2. GET /users/:id con un usuario inexistente devuelve:
+El siguiente problema conceptual que debemos abordar es:
 
-{
-  "message": "User not found"
-}
+Array:
 
-con HTTP 404.
+findById() → User | undefined
 
-PRÓXIMO BLOQUE PREVISTO
+Base de datos:
 
-Después de confirmar que todo funciona, continuar con el siguiente paso arquitectónico:
+findById() → Promise<User | undefined>
 
-Introducir persistencia más realista.
+Una persistencia real normalmente será asíncrona.
 
-Probablemente:
+Por tanto, antes de introducir PostgreSQL, Docker o cualquier base de datos, debemos explicar y modificar progresivamente el contrato para soportar operaciones asíncronas.
 
-- Extraer acceso a datos fuera del service.
-- Introducir Repository Pattern.
-- Sustituir el array en memoria por una abstracción de repositorio.
+Posible evolución:
 
-Pero no avances automáticamente.
+UserRepository
+ ↓
+métodos async
+ ↓
+Promise<User>
+Promise<User[]>
+Promise<User | undefined>
 
-Primero explica el objetivo del siguiente paso y la decisión arquitectónica antes de escribir código.
+Eso obligará a propagar async/await:
 
-Mantén siempre el enfoque:
+Repository
+ ↓
+Service
+ ↓
+Controller
+ ↓
+asyncHandler
+
+PERO NO EMPEZAR AUTOMÁTICAMENTE ESE SIGUIENTE PASO.
+
+Cuando retomemos la conversación, primero explica:
+
+1. cuál es el objetivo;
+2. qué problema resuelve;
+3. por qué el repository debe pasar a ser async;
+4. qué cambia en la arquitectura;
+5. qué parte vamos a modificar primero.
+
+Después espera mi confirmación o trabaja únicamente en el paso que yo indique.
+
+No introducir todavía una base de datos solo porque sea el siguiente paso lógico. Primero debemos entender el cambio de contrato síncrono a asíncrono.
+
+MANTENER SIEMPRE EL ENFOQUE DE MENTOR TÉCNICO
 
 - Un paso cada vez.
 - Explicar antes de implementar.
 - No saltar fases.
+- Evitar sobre-ingeniería.
+- Hacerme razonar sobre las decisiones.
+- No asumir que quiero la solución completa si no la he pedido.
+- Comprobar cada cambio antes de avanzar.
+- No introducir tecnologías o patrones antes de que exista una necesidad clara.
+- Mantener la arquitectura sencilla y comprensible.
+- Recordar las decisiones anteriores para no deshacerlas accidentalmente.
+- Si una decisión anterior deja de ser adecuada debido a un nuevo requisito, explicar primero por qué ha cambiado la situación antes de modificarla.

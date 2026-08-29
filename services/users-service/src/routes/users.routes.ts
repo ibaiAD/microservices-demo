@@ -1,17 +1,25 @@
 import { Router } from "express";
 
-import {
-  createNewUser,
-  getAllUsers,
-  getUser,
-} from "../controllers/users.controller.js";
+import type { UsersController } from "../controllers/users.controller.js";
 import { validateCreateUser } from "../middlewares/validateCreateUser.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-const router = Router();
+export function createUsersRoutes(usersController: UsersController) {
+  const router = Router();
 
-router.post("/users", validateCreateUser, asyncHandler(createNewUser));
-router.get("/users", asyncHandler(getAllUsers));
-router.get("/users/:id", asyncHandler(getUser));
+  router.post(
+    "/users",
+    validateCreateUser,
+    asyncHandler(usersController.createNewUser.bind(usersController)),
+  );
+  router.get(
+    "/users",
+    asyncHandler(usersController.getAllUsers.bind(usersController)),
+  );
+  router.get(
+    "/users/:id",
+    asyncHandler(usersController.getUser.bind(usersController)),
+  );
 
-export default router;
+  return router;
+}
