@@ -7,7 +7,7 @@ import type { CreateUserDto, User } from "../types/user.js";
 export class UsersService {
   constructor(private userRepository: UserRepository) {}
 
-  createUser(userData: CreateUserDto): User {
+  async createUser(userData: CreateUserDto): Promise<User> {
     const newId = randomUUID();
     const newUser = {
       id: newId,
@@ -17,12 +17,12 @@ export class UsersService {
     return this.userRepository.save(newUser);
   }
 
-  getUsers(): User[] {
+  async getUsers(): Promise<User[]> {
     return this.userRepository.findAll();
   }
 
-  getUserById(id: string): User {
-    const user = this.userRepository.findById(id);
+  async getUserById(id: string): Promise<User> {
+    const user = await this.userRepository.findById(id);
 
     if (!user) {
       throw new NotFoundError("User not found");

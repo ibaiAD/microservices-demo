@@ -4,14 +4,14 @@ import type { UserRepository } from "./UserRepository.js";
 export class InMemoryUserRepository implements UserRepository {
   constructor(private users: User[] = []) {}
 
-  save(user: User): User {
+  async save(user: User): Promise<User> {
     this.users.push(user);
     return user;
   }
-  findAll(): User[] {
+  async findAll(): Promise<User[]> {
     return [...this.users];
   }
-  findById(id: string): User | undefined {
+  async findById(id: string): Promise<User | undefined> {
     return this.users.find((user) => user.id === id);
   }
 }
