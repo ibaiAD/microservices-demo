@@ -61,6 +61,8 @@ TECNOLOGÍAS
 - Kafka / KafkaJS para eventos
 - Docker
 - Docker Compose
+- PostgreSQL para persistencia
+- pg como cliente PostgreSQL
 - Axios para comunicación HTTP entre servicios
 - UUID para generación de IDs
 
@@ -79,6 +81,7 @@ Estructura por capas:
 routes
 controllers
 services
+repositories
 
 Patrones que se introducirán progresivamente y solo cuando sean necesarios:
 
@@ -97,13 +100,19 @@ Los demás microservicios todavía no son el foco.
 Estructura actual de users-service:
 
 src/
-├── routes/
 ├── controllers/
-├── services/
-├── repositories/
-├── middlewares/
 ├── errors/
+├── infrastructure/
+│   └── database/
+├── middlewares/
+├── repositories/
+├── routes/
+├── services/
+├── types/
 └── utils/
+
+scripts/
+└── test-postgres.ts
 
 La arquitectura actual es:
 
@@ -121,36 +130,6 @@ repositories
  ↓
 persistence
 
-Actualmente la persistencia sigue siendo en memoria.
-
-FUNCIONALIDAD ACTUAL DE users-service
-
-Endpoints:
-
-GET /health
-POST /users
-GET /users
-GET /users/:id
-
-Modelo:
-
-User {
-  id: string;
-  name: string;
-  email: string;
-}
-
-DTO:
-
-CreateUserDto {
-  name: string;
-  email: string;
-}
-
-Los usuarios siguen almacenándose en memoria mediante un User[] dentro de la implementación InMemoryUserRepository.
-
-Los IDs se generan actualmente con randomUUID() en el service.
-
 VALIDACIÓN
 
 Existe middleware:
@@ -159,20 +138,6 @@ src/middlewares/validateCreateUser.ts
 
 Responsabilidad:
 - validar los datos necesarios para crear un usuario.
-
-Flujo de creación:
-
-request
- ↓
-validateCreateUser
- ↓
-controller
- ↓
-service
- ↓
-repository
- ↓
-response
 
 MANEJO DE ERRORES
 
@@ -184,16 +149,12 @@ src/errors/
 
 AppError:
 - hereda de Error;
-- contiene message;
-- contiene statusCode.
+- contiene statusCode;
+- contiene message.
 
 NotFoundError:
 - hereda de AppError;
 - utiliza HTTP 404.
-
-Ejemplo:
-
-throw new NotFoundError("User not found");
 
 ERROR HANDLER GLOBAL
 
@@ -203,89 +164,40 @@ src/middlewares/errorHandler.ts
 
 Está registrado al final de app.ts.
 
-Responsabilidad:
-- Si recibe un AppError:
-  - devuelve su statusCode;
-  - devuelve su message.
-- Si recibe un error desconocido:
-  - devuelve HTTP 500.
-
-Flujo:
-
-throw AppError
- ↓
-asyncHandler
- ↓
-errorHandler
- ↓
-HTTP response
-
 ASYNC ERROR HANDLING
 
 Existe:
 
 src/utils/asyncHandler.ts
 
-Implementación actual:
-
-import type { RequestHandler } from "express";
-
-export function asyncHandler(fn: RequestHandler): RequestHandler {
-  return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-}
-
-Motivo:
-- preparar Express para controllers async y errores provenientes de Promises.
-
-Decisión:
-- Los controllers se envuelven desde las rutas.
-- No se envuelven internamente.
-- La adaptación a Express pertenece a la capa HTTP.
+Los controllers se envuelven desde las rutas con asyncHandler.
+La adaptación a Express pertenece a la capa HTTP.
 
 REPOSITORY PATTERN
 
-El cambio arquitectónico más reciente ha sido introducir Repository Pattern.
-
-Antes:
-
-Controller
- ↓
-Service
- ↓
-users[]
-
-Ahora:
-
-Controller
- ↓
-Service
- ↓
-UserRepository
- ↓
-InMemoryUserRepository
- ↓
-users[]
-
-Objetivo:
-- separar las reglas de negocio del acceso a datos.
-
-El UsersService ya NO debe conocer directamente el array donde se almacenan los usuarios.
-
-USER REPOSITORY
-
-Existe:
+El repository define un contrato asíncrono:
 
 src/repositories/UserRepository.ts
 
-Contrato actual:
-
 export interface UserRepository {
-  save(user: User): User;
-  findAll(): User[];
-  findById(id: string): User | undefined;
+  save(user: User): Promise<User>;
+  findAll(): Promise<User[]>;
+  findById(id: string): Promise<User | undefined>;
 }
+
+La implementación actual sigue siendo InMemoryUserRepository,
+pero ya cumple el contrato async:
+
+src/repositories/InMemoryUserRepository.ts
+
+Todos los métodos son async y devuelven Promise<...>,
+aunque la persistencia sigue siendo un array en memoria.
+
+Decisión:
+- el contrato async fue introducido como preparación para
+  una persistencia real (PostgreSQL);
+- InMemoryUserRepository se adaptó para cumplir el contrato
+  sin cambiar su comportamiento observable.
 
 DECISIONES SOBRE EL CONTRATO DEL REPOSITORY
 
@@ -297,8 +209,6 @@ Motivo:
 - El repository se ocupa de persistir la entidad.
 - El repository no debe depender de conceptos HTTP/DTO.
 
-Actualmente el service genera el UUID y construye el User.
-
 Flujo:
 
 CreateUserDto
@@ -309,13 +219,9 @@ User + UUID
  ↓
 Repository.save(User)
 
-No hemos decidido todavía si en una futura base de datos el ID seguirá siendo generado por el service o por la base de datos.
-
-No anticipar esa decisión todavía.
-
 findById devuelve:
 
-User | undefined
+Promise<User | undefined>
 
 Motivo:
 - que un usuario no exista no es necesariamente un error de persistencia;
@@ -361,45 +267,21 @@ La implementación actual es:
 export class InMemoryUserRepository implements UserRepository {
   constructor(private users: User[] = []) {}
 
-  save(user: User): User {
+  async save(user: User): Promise<User> {
     this.users.push(user);
     return user;
   }
 
-  findAll(): User[] {
+  async findAll(): Promise<User[]> {
     return [...this.users];
   }
 
-  findById(id: string): User | undefined {
+  async findById(id: string): Promise<User | undefined> {
     return this.users.find((user) => user.id === id);
   }
 }
 
-CONSTRUCTOR DEL IN-MEMORY REPOSITORY
-
-Se utiliza:
-
-constructor(private users: User[] = []) {}
-
-No hace falta:
-
-constructor(private users: User[] = []) {
-  this.users = users;
-}
-
-porque TypeScript ya realiza la asignación mediante parameter property.
-
-Permite:
-
-new InMemoryUserRepository()
-
-para empezar vacío.
-
-También permite proporcionar usuarios iniciales:
-
-new InMemoryUserRepository(initialUsers)
-
-Esto puede ser útil para tests.
+Todos los métodos son async para cumplir el contrato de UserRepository.
 
 ENCAPSULACIÓN DEL IN-MEMORY REPOSITORY
 
@@ -424,255 +306,161 @@ Actualmente NO hemos introducido copia profunda de los objetos User.
 Decisión:
 - no añadir complejidad adicional mientras no sea necesaria.
 
+PERSISTENCIA: PREPARACIÓN PARA POSTGRESQL
+
+Se ha preparado la infraestructura para conectar con PostgreSQL,
+aunque todavía no está integrada en la aplicación.
+
+Archivos creados (sin commitear):
+
+docker-compose.yml (raíz del proyecto)
+
+Define un contenedor PostgreSQL 18:
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+
+Se ejecuta con:
+
+docker compose --env-file services/users-service/.env up -d
+
+services/users-service/.env
+
+Variables de entorno para la conexión:
+
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=users_db
+POSTGRES_USER=users_user
+POSTGRES_PASSWORD=users_password
+
+services/users-service/.env.example
+
+Plantilla sin valores para version control.
+
+services/users-service/src/infrastructure/database/postgres.ts
+
+Exporta un Pool de pg configurado con las variables de entorno:
+
+import { Pool } from "pg";
+
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST,
+  port: Number(process.env.POSTGRES_PORT),
+  database: process.env.POSTGRES_DB,
+  user: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
+});
+
+export default pool;
+
+services/users-service/scripts/test-postgres.ts
+
+Script de verificación de conectividad con la base de datos.
+
+Cambio en scripts de package.json:
+
+"dev": "node --env-file=.env --import=tsx --watch src/server.ts"
+"start": "node --env-file=.env dist/server.js"
+
+Motivo:
+- node --env-file=.env carga las variables de entorno sin
+  necesidad de dotenv u otras dependencias;
+- disponible desde Node.js 20.6+.
+
+Dependencias añadidas (sin commitear):
+
+- pg (^8.23.0): cliente PostgreSQL para Node.js
+- @types/pg (^8.23.1): tipos para TypeScript
+
+ESTADO ACTUAL DE LA INTEGRACIÓN CON POSTGRESQL
+
+La infraestructura está preparada pero NO conectada:
+
+- docker-compose.yml define el contenedor PostgreSQL.
+- .env contiene las credenciales.
+- postgres.ts exporta un Pool.
+- app.ts todavía usa InMemoryUserRepository.
+- No existe PostgresUserRepository.
+- No se ha verificado la conectividad con test-postgres.ts.
+
+El siguiente paso lógico sería:
+
+1. Levantar el contenedor PostgreSQL con docker compose.
+2. Verificar conectividad con test-postgres.ts.
+3. Implementar PostgresUserRepository que cumpla el contrato
+   de UserRepository.
+4. Intercambiar InMemoryUserRepository por PostgresUserRepository
+   en app.ts.
+5. Comprobar que los endpoints siguen funcionando.
+
 USERS SERVICE
 
-UsersService anteriormente era un conjunto de funciones.
+Implementación actual de UsersService:
 
-Se decidió convertirlo en clase porque ahora tiene una dependencia que necesita conservar:
+src/services/users.service.ts
 
-UsersService
- ↓
-UserRepository
+Todos los métodos son async:
 
-Implementación actual:
+- createUser(userData): Promise<User>
+- getUsers(): Promise<User[]>
+- getUserById(id): Promise<User>
 
-import { randomUUID } from "node:crypto";
+El service:
+- genera UUID;
+- construye el User;
+- aplica reglas de negocio;
+- delega persistencia al repository (ahora async).
 
-import { NotFoundError } from "../errors/NotFoundError.js";
-import type { UserRepository } from "../repositories/UserRepository.js";
-import type { CreateUserDto, User } from "../types/user.js";
-
-export class UsersService {
-  constructor(private userRepository: UserRepository) {}
-
-  createUser(userData: CreateUserDto): User {
-    const newId = randomUUID();
-
-    const newUser = {
-      id: newId,
-      ...userData,
-    };
-
-    return this.userRepository.save(newUser);
-  }
-
-  getUsers(): User[] {
-    return this.userRepository.findAll();
-  }
-
-  getUserById(id: string): User {
-    const user = this.userRepository.findById(id);
-
-    if (!user) {
-      throw new NotFoundError("User not found");
-    }
-
-    return user;
-  }
-}
-
-IMPORTANTE SOBRE EL SERVICE
-
-El antiguo:
-
-const users: User[] = [];
-
-que existía en el service fue eliminado.
-
-El service no debe tener su propio almacenamiento.
-
-Responsabilidades actuales del service:
-- generar UUID;
-- construir el User;
-- aplicar reglas de negocio;
-- decidir que un usuario inexistente implica NotFoundError;
-- delegar persistencia al repository.
-
-No debe:
-- conocer arrays internos del repository;
-- conocer HTTP;
-- devolver respuestas Express;
-- gestionar res.status(...).
+No conoce:
+- la implementación concreta del repository;
+- HTTP;
+- Express.
 
 USERS CONTROLLER
 
-Ahora es una clase:
-
 src/controllers/users.controller.ts
 
-Implementación actual:
+Todos los métodos son async y utilizan await:
 
-import type { Request, Response } from "express";
-import type { UsersService } from "../services/users.service.js";
-import type { CreateUserDto, User } from "../types/user.js";
+- createNewUser(req, res): await this.usersService.createUser(...)
+- getAllUsers(req, res): await this.usersService.getUsers()
+- getUser(req, res): await this.usersService.getUserById(...)
 
-export class UsersController {
-  constructor(private usersService: UsersService) {}
-
-  async createNewUser(req: Request, res: Response) {
-    const userData: CreateUserDto = req.body;
-
-    const newUser = this.usersService.createUser(userData);
-
-    res.status(201).json(newUser);
-  }
-
-  async getAllUsers(_req: Request, res: Response) {
-    const users: User[] = this.usersService.getUsers();
-
-    res.json(users);
-  }
-
-  async getUser(req: Request, res: Response) {
-    const id = req.params.id as string;
-
-    const user = this.usersService.getUserById(id);
-
-    res.json(user);
-  }
-}
-
-MOTIVO DE CONVERTIR EL CONTROLLER EN CLASE
-
-Queríamos expresar explícitamente su dependencia:
-
-constructor(private usersService: UsersService) {}
-
-No se decidió que los controllers deban ser clases como regla general.
-
-Fue una decisión pragmática para este proyecto porque el controller necesita conservar una dependencia.
-
-El controller:
-- conoce Express;
-- recibe Request;
-- genera respuestas HTTP;
-- delega la lógica al service.
-
-No conoce:
-- repositories;
-- arrays;
-- persistencia;
-- UUID;
-- reglas de almacenamiento.
+El controller conoce Express y delega la lógica al service.
 
 USERS ROUTES
 
-Ya no exportamos directamente un Router.
-
-Existe:
-
 src/routes/users.routes.ts
 
-Exporta:
+Se exporta:
 
 createUsersRoutes(usersController)
 
-Implementación actual:
-
-import { Router } from "express";
-
-import type { UsersController } from "../controllers/users.controller.js";
-import { validateCreateUser } from "../middlewares/validateCreateUser.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
-
-export function createUsersRoutes(usersController: UsersController) {
-  const router = Router();
-
-  router.post(
-    "/users",
-    validateCreateUser,
-    asyncHandler(usersController.createNewUser.bind(usersController)),
-  );
-
-  router.get(
-    "/users",
-    asyncHandler(usersController.getAllUsers.bind(usersController)),
-  );
-
-  router.get(
-    "/users/:id",
-    asyncHandler(usersController.getUser.bind(usersController)),
-  );
-
-  return router;
-}
-
-BIND EN LAS RUTAS
-
-Usamos:
-
-usersController.getUser.bind(usersController)
-
-porque Express recibe una referencia al método y puede ejecutarlo sin el contexto original de la instancia.
-
-bind garantiza que:
-
-this
-
-siga apuntando al UsersController.
-
-No hemos introducido otras técnicas de binding.
+Utiliza asyncHandler + bind para adaptar los controllers async
+a Express.
 
 APP.TS / COMPOSITION ROOT
 
-app.ts es actualmente el punto donde ensamblamos las dependencias.
+src/app.ts
 
-Implementación actual:
-
-import express from "express";
-
-import { UsersController } from "./controllers/users.controller.js";
-import { errorHandler } from "./middlewares/errorHandler.js";
-import { InMemoryUserRepository } from "./repositories/InMemoryUserRepository.js";
-import type { UserRepository } from "./repositories/UserRepository.js";
-import healthRoutes from "./routes/health.routes.js";
-import { createUsersRoutes } from "./routes/users.routes.js";
-import { UsersService } from "./services/users.service.js";
-
-const app = express();
-
-app.use(express.json());
-
-app.use(healthRoutes);
+Ensambla las dependencias:
 
 const userRepository: UserRepository = new InMemoryUserRepository();
 const usersService = new UsersService(userRepository);
 const usersController = new UsersController(usersService);
-
 app.use(createUsersRoutes(usersController));
 
-app.use(errorHandler);
-
-export default app;
-
-app.ts actúa como Composition Root.
-
-La aplicación decide aquí qué implementación concreta utilizar:
-
-InMemoryUserRepository
- ↓
-UsersService
- ↓
-UsersController
- ↓
-createUsersRoutes
- ↓
-Express
-
-La línea:
-
-const userRepository: UserRepository = new InMemoryUserRepository();
-
-hace explícito que la variable está tipada mediante la abstracción UserRepository, aunque la implementación concreta sea InMemoryUserRepository.
-
-Decisión:
-- no utilizar todavía un framework o contenedor de Dependency Injection;
-- la Dependency Injection es manual;
-- no introducir factories o contenedores mientras no sean necesarios.
+Aún no se ha introducido PostgresUserRepository aquí.
 
 FLUJO ACTUAL COMPLETO
-
-Para una petición normal:
 
 HTTP request
  ↓
@@ -684,41 +472,51 @@ validateCreateUser (cuando corresponde)
  ↓
 asyncHandler
  ↓
-UsersController
+UsersController (async, con await)
  ↓
-UsersService
+UsersService (async, con await)
  ↓
-UserRepository
+UserRepository (contrato async)
  ↓
-InMemoryUserRepository
+InMemoryUserRepository (async, array en memoria)
  ↓
 User[]
 
-Para un usuario inexistente:
+DECISIONES ARQUITECTÓNICAS YA TOMADAS
 
-GET /users/:id
- ↓
-Route
- ↓
-asyncHandler
- ↓
-UsersController
- ↓
-UsersService
- ↓
-UserRepository.findById()
- ↓
-undefined
- ↓
-UsersService
- ↓
-NotFoundError("User not found")
- ↓
-asyncHandler.catch(next)
- ↓
-errorHandler
- ↓
-HTTP 404
+No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una razón nueva:
+
+1. El service utiliza Repository Pattern.
+2. El repository se define mediante una interfaz.
+3. El contrato del repository es asíncrono (Promise<...>).
+4. InMemoryUserRepository es la implementación actual.
+5. UsersService depende de UserRepository, no de InMemoryUserRepository.
+6. UsersController depende de UsersService.
+7. app.ts actúa como Composition Root.
+8. Dependency Injection se hace manualmente.
+9. No se utiliza ningún contenedor DI.
+10. Los controllers se adaptan a Express mediante asyncHandler desde las rutas.
+11. Los controllers son async con await sobre las llamadas al service.
+12. Los services son async con await sobre las llamadas al repository.
+13. findById devuelve Promise<User | undefined>.
+14. El service transforma un usuario inexistente en NotFoundError.
+15. Los repositories no conocen HTTP.
+16. El service no conoce Express.
+17. El DTO pertenece al límite de entrada de la aplicación; el repository trabaja con User.
+18. La persistencia actual sigue siendo un array en memoria, pero el contrato ya es async.
+19. Se ha preparado infraestructura PostgreSQL (docker-compose, .env, pg Pool, test script) sin integrarla todavía.
+20. Las variables de entorno se cargan con node --env-file, sin dependencias externas.
+21. No se ha creado PostgresUserRepository todavía.
+22. No introducir factories, DI containers ni otras abstracciones mientras no sean necesarias.
+23. No añadir complejidad de encapsulación adicional, como deep cloning, mientras no exista una necesidad real.
+24. No convertir clases o funciones simplemente por seguir un patrón; las decisiones deben responder a una necesidad concreta.
+25. El controller se ha convertido en clase porque necesita conservar su dependencia con UsersService.
+26. Las rutas reciben el controller mediante createUsersRoutes(usersController).
+27. app.ts construye manualmente las dependencias.
+28. bind se realiza en las rutas y no dentro del controller.
+29. El repository trabaja con User, no con CreateUserDto.
+30. Los errores de negocio, como usuario no encontrado, se deciden en el service y no en el repository.
+31. La API externa no debe cambiar como consecuencia de refactorizaciones internas salvo que se decida explícitamente.
 
 VERIFICACIONES REALIZADAS
 
@@ -730,132 +528,30 @@ Se ha comprobado que:
 - GET /users/:id devuelve usuarios existentes.
 - GET /users/abc devuelve {"message":"User not found"} con HTTP 404.
 
-También se comprobó que la refactorización a:
-
-Routes
- ↓
-Controller
- ↓
-Service
- ↓
-Repository
-
-no cambió el comportamiento externo de la API.
-
-ESTADO ACTUAL
-
-La refactorización de users-service a:
-
-Routes
- ↓
-Controller
- ↓
-Service
- ↓
-Repository
- ↓
-InMemoryUserRepository
-
-está terminada.
-
-Todo funciona correctamente.
-
-Se ha comprobado que todos los endpoints de usuarios siguen devolviendo las respuestas esperadas.
-
-El cambio final realizado antes de guardar este contexto fue eliminar el antiguo array:
-
-const users: User[] = [];
-
-de users.service.ts, porque el almacenamiento ahora pertenece exclusivamente a InMemoryUserRepository.
-
-DECISIONES ARQUITECTÓNICAS YA TOMADAS
-
-No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una razón nueva:
-
-1. El service utiliza Repository Pattern.
-2. El repository se define mediante una interfaz.
-3. InMemoryUserRepository es la implementación actual.
-4. UsersService depende de UserRepository, no de InMemoryUserRepository.
-5. UsersController depende de UsersService.
-6. app.ts actúa como Composition Root.
-7. Dependency Injection se hace manualmente.
-8. No se utiliza ningún contenedor DI.
-9. Los controllers se adaptan a Express mediante asyncHandler desde las rutas.
-10. Los controllers son async para preparar la futura persistencia asíncrona.
-11. findById devuelve User | undefined.
-12. El service transforma un usuario inexistente en NotFoundError.
-13. Los repositories no conocen HTTP.
-14. El service no conoce Express.
-15. El DTO pertenece al límite de entrada de la aplicación; el repository trabaja con User.
-16. El almacenamiento sigue siendo un array en memoria.
-17. No introducir PostgreSQL, Docker, Kafka, factories, DI containers ni otras abstracciones hasta que sean necesarias.
-18. No añadir complejidad de encapsulación adicional, como deep cloning, mientras no exista una necesidad real.
-19. No convertir clases o funciones simplemente por seguir un patrón; las decisiones deben responder a una necesidad concreta.
-20. El controller se ha convertido en clase porque necesita conservar su dependencia con UsersService.
-21. Las rutas reciben el controller mediante createUsersRoutes(usersController).
-22. app.ts construye manualmente las dependencias.
-23. bind se realiza en las rutas y no dentro del controller.
-24. El repository trabaja con User, no con CreateUserDto.
-25. Los errores de negocio, como usuario no encontrado, se deciden en el service y no en el repository.
-26. La API externa no debe cambiar como consecuencia de refactorizaciones internas salvo que se decida explícitamente.
+Se verificó que la refactorización a contrato async no cambió el comportamiento externo de la API.
 
 PUNTO EXACTO DONDE CONTINUAR
 
-El bloque de Repository Pattern + Dependency Injection manual está terminado.
+El bloque de async repository contract + preparación PostgreSQL está en progreso.
 
-El código funciona.
+El contrato async está commiteado y funciona.
+La infraestructura PostgreSQL (docker-compose, .env, pg Pool) está preparada pero sin commitear y sin integrar.
 
-El proyecto se deja deliberadamente en este estado por ahora.
+El siguiente paso previsto es:
 
-El siguiente bloque previsto es estudiar cómo cambiar el repository para una persistencia real.
+1. Verificar que PostgreSQL funciona con docker compose y test-postgres.ts.
+2. Crear PostgresUserRepository que implemente UserRepository.
+3. Intercambiar la implementación en app.ts.
+4. Comprobar que los endpoints siguen funcionando con persistencia real.
 
-El siguiente problema conceptual que debemos abordar es:
+Cuando retomemos, primero explica:
 
-Array:
-
-findById() → User | undefined
-
-Base de datos:
-
-findById() → Promise<User | undefined>
-
-Una persistencia real normalmente será asíncrona.
-
-Por tanto, antes de introducir PostgreSQL, Docker o cualquier base de datos, debemos explicar y modificar progresivamente el contrato para soportar operaciones asíncronas.
-
-Posible evolución:
-
-UserRepository
- ↓
-métodos async
- ↓
-Promise<User>
-Promise<User[]>
-Promise<User | undefined>
-
-Eso obligará a propagar async/await:
-
-Repository
- ↓
-Service
- ↓
-Controller
- ↓
-asyncHandler
-
-PERO NO EMPEZAR AUTOMÁTICAMENTE ESE SIGUIENTE PASO.
-
-Cuando retomemos la conversación, primero explica:
-
-1. cuál es el objetivo;
-2. qué problema resuelve;
-3. por qué el repository debe pasar a ser async;
-4. qué cambia en la arquitectura;
-5. qué parte vamos a modificar primero.
+1. el estado actual de la integración PostgreSQL pendiente;
+2. qué vamos a verificar primero;
+3. cómo se estructurará PostgresUserRepository;
+4. qué cambiará en app.ts.
 
 Después espera mi confirmación o trabaja únicamente en el paso que yo indique.
-
-No introducir todavía una base de datos solo porque sea el siguiente paso lógico. Primero debemos entender el cambio de contrato síncrono a asíncrono.
 
 MANTENER SIEMPRE EL ENFOQUE DE MENTOR TÉCNICO
 
