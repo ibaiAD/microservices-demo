@@ -5,33 +5,35 @@ ROL Y FORMA DE TRABAJO
 Actúa como mi mentor técnico.
 
 Objetivo:
-- Aprender arquitectura de microservicios desde cero entendiendo el porqué de cada decisión.
-- No quiero simplemente copiar código.
-- Quiero avanzar de forma incremental.
-- Solo un paso por respuesta.
-- No avances al siguiente paso hasta que confirme que he terminado el actual.
-- Antes de escribir código, explica brevemente:
-  - cuál es el objetivo del paso;
-  - qué problema resuelve;
-  - qué decisión arquitectónica estamos tomando y por qué.
-- Introduce complejidad únicamente cuando sea necesaria.
-- Evita sobre-ingeniería.
-- Si existe más de una solución razonable, explica brevemente las alternativas y recomienda una para este proyecto.
-- No conviertas algo en clase, patrón o abstracción simplemente porque sea posible; debe existir una razón arquitectónica clara.
-- Quiero entender los conceptos, no solamente obtener código.
+
+* Aprender arquitectura de microservicios desde cero entendiendo el porqué de cada decisión.
+* No quiero simplemente copiar código.
+* Quiero avanzar de forma incremental.
+* Solo un paso por respuesta.
+* No avances al siguiente paso hasta que confirme que he terminado el actual.
+* Antes de escribir código, explica brevemente:
+
+  * cuál es el objetivo del paso;
+  * qué problema resuelve;
+  * qué decisión arquitectónica estamos tomando y por qué.
+* Introduce complejidad únicamente cuando sea necesaria.
+* Evita sobre-ingeniería.
+* Si existe más de una solución razonable, explica brevemente las alternativas y recomienda una para este proyecto.
+* No conviertas algo en clase, patrón o abstracción simplemente porque sea posible; debe existir una razón arquitectónica clara.
+* Quiero entender los conceptos, no solamente obtener código.
 
 REGLAS IMPORTANTES DE TRABAJO
 
-- Un solo paso cada vez.
-- Primero explicar, después implementar.
-- No saltar fases.
-- Después de implementar un paso, comprobar que funciona antes de continuar.
-- Si detectas restos de una implementación anterior, señálalos antes de avanzar.
-- Mantén el proyecto deliberadamente sencillo mientras no necesitemos más complejidad.
-- No hagas cambios adicionales que no formen parte del paso actual.
-- Si una decisión puede esperar hasta que exista una necesidad real, no la anticipes.
-- Quiero participar en las decisiones. Siempre que sea razonable, hazme pensar primero antes de darme la solución.
-- Si te pido directamente la solución, puedes proporcionármela, pero explica antes por qué es la solución elegida.
+* Un solo paso cada vez.
+* Primero explicar, después implementar.
+* No saltar fases.
+* Después de implementar un paso, comprobar que funciona antes de continuar.
+* Si detectas restos de una implementación anterior, señálalos antes de avanzar.
+* Mantén el proyecto deliberadamente sencillo mientras no necesitemos más complejidad.
+* No hagas cambios adicionales que no formen parte del paso actual.
+* Si una decisión puede esperar hasta que exista una necesidad real, no la anticipes.
+* Quiero participar en las decisiones. Siempre que sea razonable, hazme pensar primero antes de darme la solución.
+* Si te pido directamente la solución, puedes proporcionármela, pero explica antes por qué es la solución elegida.
 
 PROYECTO
 
@@ -53,18 +55,18 @@ orders-service
 
 TECNOLOGÍAS
 
-- Node.js
-- TypeScript
-- Express
-- ES Modules ("type": "module")
-- tsx como runtime de desarrollo
-- Kafka / KafkaJS para eventos
-- Docker
-- Docker Compose
-- PostgreSQL para persistencia
-- pg como cliente PostgreSQL
-- Axios para comunicación HTTP entre servicios
-- UUID para generación de IDs
+* Node.js
+* TypeScript
+* Express
+* ES Modules ("type": "module")
+* tsx como runtime de desarrollo
+* Kafka / KafkaJS para eventos
+* Docker
+* Docker Compose
+* PostgreSQL para persistencia
+* pg como cliente PostgreSQL
+* Axios para comunicación HTTP entre servicios
+* UUID para generación de IDs
 
 ARQUITECTURA OBJETIVO
 
@@ -73,8 +75,9 @@ Cada microservicio debe ser independiente.
 El API Gateway será el único punto de entrada externo.
 
 Comunicación:
-- HTTP para consultas síncronas.
-- Kafka para eventos desacoplados.
+
+* HTTP para consultas síncronas.
+* Kafka para eventos desacoplados.
 
 Estructura por capas:
 
@@ -85,11 +88,11 @@ repositories
 
 Patrones que se introducirán progresivamente y solo cuando sean necesarios:
 
-- DTOs
-- Middleware
-- Error handling centralizado
-- Repository Pattern
-- Event-driven architecture con Kafka
+* DTOs
+* Middleware
+* Error handling centralizado
+* Repository Pattern
+* Event-driven architecture con Kafka
 
 ESTADO GENERAL DEL PROYECTO
 
@@ -117,17 +120,17 @@ scripts/
 La arquitectura actual es:
 
 request
- ↓
+↓
 routes
- ↓
+↓
 middlewares
- ↓
+↓
 controllers
- ↓
+↓
 services
- ↓
+↓
 repositories
- ↓
+↓
 persistence
 
 VALIDACIÓN
@@ -137,7 +140,8 @@ Existe middleware:
 src/middlewares/validateCreateUser.ts
 
 Responsabilidad:
-- validar los datos necesarios para crear un usuario.
+
+* validar los datos necesarios para crear un usuario.
 
 MANEJO DE ERRORES
 
@@ -148,13 +152,15 @@ src/errors/
 └── NotFoundError.ts
 
 AppError:
-- hereda de Error;
-- contiene statusCode;
-- contiene message.
+
+* hereda de Error;
+* contiene statusCode;
+* contiene message.
 
 NotFoundError:
-- hereda de AppError;
-- utiliza HTTP 404.
+
+* hereda de AppError;
+* utiliza HTTP 404.
 
 ERROR HANDLER GLOBAL
 
@@ -180,43 +186,62 @@ El repository define un contrato asíncrono:
 src/repositories/UserRepository.ts
 
 export interface UserRepository {
-  save(user: User): Promise<User>;
-  findAll(): Promise<User[]>;
-  findById(id: string): Promise<User | undefined>;
+save(user: User): Promise<User>;
+findAll(): Promise<User[]>;
+findById(id: string): Promise<User | undefined>;
 }
 
-La implementación actual sigue siendo InMemoryUserRepository,
-pero ya cumple el contrato async:
+La implementación que se utilizó inicialmente es InMemoryUserRepository y actualmente sigue existiendo.
 
 src/repositories/InMemoryUserRepository.ts
 
-Todos los métodos son async y devuelven Promise<...>,
-aunque la persistencia sigue siendo un array en memoria.
+Implementa UserRepository.
+
+La implementación actual es:
+
+export class InMemoryUserRepository implements UserRepository {
+constructor(private users: User[] = []) {}
+
+async save(user: User): Promise<User> {
+this.users.push(user);
+return user;
+}
+
+async findAll(): Promise<User[]> {
+return [...this.users];
+}
+
+async findById(id: string): Promise<User | undefined> {
+return this.users.find((user) => user.id === id);
+}
+}
+
+Todos los métodos son async para cumplir el contrato de UserRepository.
 
 Decisión:
-- el contrato async fue introducido como preparación para
-  una persistencia real (PostgreSQL);
-- InMemoryUserRepository se adaptó para cumplir el contrato
-  sin cambiar su comportamiento observable.
+
+* el contrato async fue introducido como preparación para una persistencia real (PostgreSQL);
+* InMemoryUserRepository se adaptó para cumplir el contrato sin cambiar su comportamiento observable.
 
 DECISIONES SOBRE EL CONTRATO DEL REPOSITORY
 
 save recibe un User, no un CreateUserDto.
 
 Motivo:
-- CreateUserDto representa datos provenientes de HTTP.
-- User representa la entidad que el service ha construido.
-- El repository se ocupa de persistir la entidad.
-- El repository no debe depender de conceptos HTTP/DTO.
+
+* CreateUserDto representa datos provenientes de HTTP.
+* User representa la entidad que el service ha construido.
+* El repository se ocupa de persistir la entidad.
+* El repository no debe depender de conceptos HTTP/DTO.
 
 Flujo:
 
 CreateUserDto
- ↓
+↓
 Service
- ↓
+↓
 User + UUID
- ↓
+↓
 Repository.save(User)
 
 findById devuelve:
@@ -224,18 +249,19 @@ findById devuelve:
 Promise<User | undefined>
 
 Motivo:
-- que un usuario no exista no es necesariamente un error de persistencia;
-- el repository informa de que no existe;
-- el service decide que eso constituye un error de negocio.
+
+* que un usuario no exista no es necesariamente un error de persistencia;
+* el repository informa de que no existe;
+* el service decide que eso constituye un error de negocio.
 
 Flujo:
 
 Repository
- ↓
+↓
 undefined
- ↓
+↓
 Service
- ↓
+↓
 NotFoundError
 
 El repository NO conoce HTTP ni 404.
@@ -247,41 +273,10 @@ No queremos utilizar undefined, null o never como mecanismo genérico de error p
 La decisión actual es:
 
 save()
- ├── éxito → User
- └── error → throw error
+├── éxito → User
+└── error → throw error
 
 never no es un tipo apropiado para representar un posible fallo de persistencia.
-
-IN-MEMORY REPOSITORY
-
-Existe:
-
-src/repositories/InMemoryUserRepository.ts
-
-Implementa:
-
-UserRepository
-
-La implementación actual es:
-
-export class InMemoryUserRepository implements UserRepository {
-  constructor(private users: User[] = []) {}
-
-  async save(user: User): Promise<User> {
-    this.users.push(user);
-    return user;
-  }
-
-  async findAll(): Promise<User[]> {
-    return [...this.users];
-  }
-
-  async findById(id: string): Promise<User | undefined> {
-    return this.users.find((user) => user.id === id);
-  }
-}
-
-Todos los métodos son async para cumplir el contrato de UserRepository.
 
 ENCAPSULACIÓN DEL IN-MEMORY REPOSITORY
 
@@ -304,36 +299,52 @@ Con la copia superficial, esa operación modifica únicamente la copia.
 Actualmente NO hemos introducido copia profunda de los objetos User.
 
 Decisión:
-- no añadir complejidad adicional mientras no sea necesaria.
+
+* no añadir complejidad adicional mientras no sea necesaria.
 
 PERSISTENCIA: PREPARACIÓN PARA POSTGRESQL
 
-Se ha preparado la infraestructura para conectar con PostgreSQL,
-aunque todavía no está integrada en la aplicación.
+La infraestructura PostgreSQL ya está preparada y su conectividad ya ha sido verificada, pero todavía NO está integrada en la aplicación.
 
-Archivos creados (sin commitear):
+Existe en la raíz del proyecto:
 
-docker-compose.yml (raíz del proyecto)
+docker-compose.yml
 
-Define un contenedor PostgreSQL 18:
+Define un contenedor PostgreSQL 18.
 
-services:
-  postgres:
-    image: postgres:18
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
+Las variables utilizadas por Docker Compose están separadas explícitamente para users-service.
 
-Se ejecuta con:
+Existe en la raíz:
+
+.env
+
+Contenido conceptual:
+
+USERS_POSTGRES_DB=users_db
+USERS_POSTGRES_USER=users_user
+USERS_POSTGRES_PASSWORD=users_password
+
+También existe:
+
+.env.example
+
+Con las mismas variables pero sin valores.
+
+La razón de utilizar nombres USERS_POSTGRES_* en el .env raíz es dejar claro que actualmente estas variables pertenecen a users-service y evitar ambigüedad cuando posteriormente existan otros servicios con sus propias bases de datos.
+
+Docker Compose carga automáticamente el .env situado en la raíz, por lo que ahora se puede ejecutar:
+
+docker compose up -d
+
+sin necesidad de utilizar:
 
 docker compose --env-file services/users-service/.env up -d
 
 services/users-service/.env
 
-Variables de entorno para la conexión:
+Se mantiene separado porque pertenece a la configuración que utiliza la aplicación Node cuando se ejecuta localmente.
+
+Actualmente contiene:
 
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
@@ -341,9 +352,15 @@ POSTGRES_DB=users_db
 POSTGRES_USER=users_user
 POSTGRES_PASSWORD=users_password
 
+La decisión actual es mantener nombres genéricos POSTGRES_* dentro de users-service porque son variables directamente relacionadas con la configuración del Pool de PostgreSQL de la aplicación.
+
 services/users-service/.env.example
 
-Plantilla sin valores para version control.
+Se mantiene como plantilla para la configuración local de users-service.
+
+INFRAESTRUCTURA POSTGRESQL
+
+Existe:
 
 services/users-service/src/infrastructure/database/postgres.ts
 
@@ -352,54 +369,101 @@ Exporta un Pool de pg configurado con las variables de entorno:
 import { Pool } from "pg";
 
 const pool = new Pool({
-  host: process.env.POSTGRES_HOST,
-  port: Number(process.env.POSTGRES_PORT),
-  database: process.env.POSTGRES_DB,
-  user: process.env.POSTGRES_USER,
-  password: process.env.POSTGRES_PASSWORD,
+host: process.env.POSTGRES_HOST,
+port: Number(process.env.POSTGRES_PORT),
+database: process.env.POSTGRES_DB,
+user: process.env.POSTGRES_USER,
+password: process.env.POSTGRES_PASSWORD,
 });
 
 export default pool;
 
+Existe:
+
 services/users-service/scripts/test-postgres.ts
 
-Script de verificación de conectividad con la base de datos.
+El script verifica la conectividad mediante:
 
-Cambio en scripts de package.json:
+const res = await pool.query("SELECT 1");
+
+y posteriormente cierra el pool con:
+
+await pool.end();
+
+Se ejecuta con:
+
+node --env-file=.env --import=tsx scripts/test-postgres.ts
+
+La prueba ya se ha ejecutado correctamente y devuelve:
+
+[ { '?column?': 1 } ]
+
+Por tanto, está verificado que:
+
+.env de users-service
+↓
+Node.js
+↓
+pg Pool
+↓
+PostgreSQL en Docker
+↓
+SELECT 1
+
+funciona correctamente.
+
+También se ha verificado que:
+
+docker compose up -d
+
+funciona correctamente desde el proyecto sin --env-file y que el contenedor PostgreSQL queda en estado Up.
+
+DEPENDENCIAS
+
+Se han añadido:
+
+* pg (^8.23.0): cliente PostgreSQL para Node.js
+* @types/pg (^8.23.1): tipos para TypeScript
+
+SCRIPTS DE PACKAGE.JSON
+
+Actualmente se utiliza:
 
 "dev": "node --env-file=.env --import=tsx --watch src/server.ts"
 "start": "node --env-file=.env dist/server.js"
 
 Motivo:
-- node --env-file=.env carga las variables de entorno sin
-  necesidad de dotenv u otras dependencias;
-- disponible desde Node.js 20.6+.
 
-Dependencias añadidas (sin commitear):
-
-- pg (^8.23.0): cliente PostgreSQL para Node.js
-- @types/pg (^8.23.1): tipos para TypeScript
+* node --env-file=.env carga las variables de entorno sin necesidad de dotenv u otras dependencias;
+* disponible desde Node.js 20.6+.
 
 ESTADO ACTUAL DE LA INTEGRACIÓN CON POSTGRESQL
 
-La infraestructura está preparada pero NO conectada:
+La infraestructura PostgreSQL está preparada y verificada.
 
-- docker-compose.yml define el contenedor PostgreSQL.
-- .env contiene las credenciales.
-- postgres.ts exporta un Pool.
-- app.ts todavía usa InMemoryUserRepository.
-- No existe PostgresUserRepository.
-- No se ha verificado la conectividad con test-postgres.ts.
+Ya se ha comprobado:
 
-El siguiente paso lógico sería:
+1. PostgreSQL arranca correctamente mediante Docker Compose.
+2. Docker Compose encuentra automáticamente las variables del .env raíz.
+3. El contenedor PostgreSQL queda operativo.
+4. El Pool de pg puede conectarse desde users-service.
+5. SELECT 1 funciona correctamente.
 
-1. Levantar el contenedor PostgreSQL con docker compose.
-2. Verificar conectividad con test-postgres.ts.
-3. Implementar PostgresUserRepository que cumpla el contrato
-   de UserRepository.
-4. Intercambiar InMemoryUserRepository por PostgresUserRepository
-   en app.ts.
-5. Comprobar que los endpoints siguen funcionando.
+Todavía falta:
+
+1. Diseñar la estructura de PostgresUserRepository.
+2. Implementar PostgresUserRepository para que cumpla el contrato UserRepository.
+3. Crear la estructura de persistencia necesaria en PostgreSQL, cuando corresponda.
+4. Intercambiar InMemoryUserRepository por PostgresUserRepository en app.ts.
+5. Comprobar que los endpoints siguen funcionando con persistencia real.
+
+IMPORTANTE:
+
+* No existe todavía PostgresUserRepository.
+* app.ts todavía utiliza InMemoryUserRepository.
+* PostgreSQL todavía no forma parte del flujo HTTP de la aplicación.
+* No debemos asumir que necesitamos migraciones, ORM, factories, contenedores DI u otras herramientas sin una necesidad concreta.
+* No introducir una capa adicional para la configuración mientras no exista una razón real.
 
 USERS SERVICE
 
@@ -409,20 +473,19 @@ src/services/users.service.ts
 
 Todos los métodos son async:
 
-- createUser(userData): Promise<User>
-- getUsers(): Promise<User[]>
-- getUserById(id): Promise<User>
+* createUser(userData): Promise<User>
+* getUsers(): Promise<User[]>
+* getUserById(id): Promise<User>
 
 El service:
-- genera UUID;
-- construye el User;
-- aplica reglas de negocio;
-- delega persistencia al repository (ahora async).
 
-No conoce:
-- la implementación concreta del repository;
-- HTTP;
-- Express.
+* genera UUID;
+* construye el User;
+* aplica reglas de negocio;
+* delega persistencia al repository;
+* no conoce la implementación concreta del repository;
+* no conoce HTTP;
+* no conoce Express.
 
 USERS CONTROLLER
 
@@ -430,9 +493,9 @@ src/controllers/users.controller.ts
 
 Todos los métodos son async y utilizan await:
 
-- createNewUser(req, res): await this.usersService.createUser(...)
-- getAllUsers(req, res): await this.usersService.getUsers()
-- getUser(req, res): await this.usersService.getUserById(...)
+* createNewUser(req, res): await this.usersService.createUser(...)
+* getAllUsers(req, res): await this.usersService.getUsers()
+* getUser(req, res): await this.usersService.getUserById(...)
 
 El controller conoce Express y delega la lógica al service.
 
@@ -444,43 +507,66 @@ Se exporta:
 
 createUsersRoutes(usersController)
 
-Utiliza asyncHandler + bind para adaptar los controllers async
-a Express.
+Utiliza asyncHandler + bind para adaptar los controllers async a Express.
 
 APP.TS / COMPOSITION ROOT
 
 src/app.ts
 
-Ensambla las dependencias:
+Ensambla actualmente las dependencias:
 
 const userRepository: UserRepository = new InMemoryUserRepository();
 const usersService = new UsersService(userRepository);
 const usersController = new UsersController(usersService);
 app.use(createUsersRoutes(usersController));
 
-Aún no se ha introducido PostgresUserRepository aquí.
+Todavía no se ha introducido PostgresUserRepository aquí.
 
 FLUJO ACTUAL COMPLETO
 
 HTTP request
- ↓
+↓
 Express
- ↓
+↓
 Route
- ↓
+↓
 validateCreateUser (cuando corresponde)
- ↓
+↓
 asyncHandler
- ↓
+↓
 UsersController (async, con await)
- ↓
+↓
 UsersService (async, con await)
- ↓
+↓
 UserRepository (contrato async)
- ↓
+↓
 InMemoryUserRepository (async, array en memoria)
- ↓
+↓
 User[]
+
+FLUJO OBJETIVO INMEDIATO
+
+HTTP request
+↓
+Express
+↓
+Route
+↓
+validateCreateUser
+↓
+asyncHandler
+↓
+UsersController
+↓
+UsersService
+↓
+UserRepository
+↓
+PostgresUserRepository
+↓
+PostgreSQL
+
+La transición de InMemoryUserRepository a PostgresUserRepository debe hacerse sin cambiar la API externa salvo que exista una razón explícita.
 
 DECISIONES ARQUITECTÓNICAS YA TOMADAS
 
@@ -489,7 +575,7 @@ No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una 
 1. El service utiliza Repository Pattern.
 2. El repository se define mediante una interfaz.
 3. El contrato del repository es asíncrono (Promise<...>).
-4. InMemoryUserRepository es la implementación actual.
+4. InMemoryUserRepository es la implementación actual hasta que la sustituyamos explícitamente.
 5. UsersService depende de UserRepository, no de InMemoryUserRepository.
 6. UsersController depende de UsersService.
 7. app.ts actúa como Composition Root.
@@ -504,7 +590,7 @@ No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una 
 16. El service no conoce Express.
 17. El DTO pertenece al límite de entrada de la aplicación; el repository trabaja con User.
 18. La persistencia actual sigue siendo un array en memoria, pero el contrato ya es async.
-19. Se ha preparado infraestructura PostgreSQL (docker-compose, .env, pg Pool, test script) sin integrarla todavía.
+19. La infraestructura PostgreSQL está preparada y su conectividad ya ha sido verificada.
 20. Las variables de entorno se cargan con node --env-file, sin dependencias externas.
 21. No se ha creado PostgresUserRepository todavía.
 22. No introducir factories, DI containers ni otras abstracciones mientras no sean necesarias.
@@ -517,52 +603,57 @@ No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una 
 29. El repository trabaja con User, no con CreateUserDto.
 30. Los errores de negocio, como usuario no encontrado, se deciden en el service y no en el repository.
 31. La API externa no debe cambiar como consecuencia de refactorizaciones internas salvo que se decida explícitamente.
+32. El .env raíz contiene variables destinadas a Docker Compose y utiliza nombres USERS_POSTGRES_* para dejar claro que pertenecen a users-service.
+33. El .env de users-service contiene las variables POSTGRES_* que consume directamente la aplicación Node.
+34. No introducir todavía Dockerfile para users-service; se hará cuando exista la necesidad real de ejecutar el microservicio dentro de Docker.
 
 VERIFICACIONES REALIZADAS
 
 Se ha comprobado que:
-- GET /users funciona.
-- GET /users devuelve [] inicialmente.
-- POST /users crea usuarios correctamente.
-- GET /users devuelve los usuarios creados.
-- GET /users/:id devuelve usuarios existentes.
-- GET /users/abc devuelve {"message":"User not found"} con HTTP 404.
 
-Se verificó que la refactorización a contrato async no cambió el comportamiento externo de la API.
+* GET /users funciona.
+* GET /users devuelve [] inicialmente.
+* POST /users crea usuarios correctamente.
+* GET /users devuelve los usuarios creados.
+* GET /users/:id devuelve usuarios existentes.
+* GET /users/abc devuelve {"message":"User not found"} con HTTP 404.
+* La refactorización a contrato async no cambió el comportamiento externo de la API.
+* PostgreSQL arranca correctamente con Docker Compose.
+* docker compose up -d funciona sin --env-file.
+* PostgreSQL queda en estado Up.
+* El Pool de pg puede conectarse correctamente.
+* SELECT 1 devuelve [ { '?column?': 1 } ].
 
 PUNTO EXACTO DONDE CONTINUAR
 
-El bloque de async repository contract + preparación PostgreSQL está en progreso.
+La verificación de infraestructura PostgreSQL está terminada.
 
-El contrato async está commiteado y funciona.
-La infraestructura PostgreSQL (docker-compose, .env, pg Pool) está preparada pero sin commitear y sin integrar.
+El siguiente paso lógico es trabajar únicamente en el diseño de PostgresUserRepository.
 
-El siguiente paso previsto es:
+Antes de escribir código, explica:
 
-1. Verificar que PostgreSQL funciona con docker compose y test-postgres.ts.
-2. Crear PostgresUserRepository que implemente UserRepository.
-3. Intercambiar la implementación en app.ts.
-4. Comprobar que los endpoints siguen funcionando con persistencia real.
+1. qué responsabilidad tendrá PostgresUserRepository;
+2. cómo cumplirá exactamente el contrato actual de UserRepository;
+3. qué operaciones SQL necesita para implementar save, findAll y findById;
+4. qué estructura mínima necesitamos en PostgreSQL para persistir User;
+5. qué alternativas razonables existen para crear la tabla y cuál recomiendas para este proyecto;
+6. qué cambiará posteriormente en app.ts para sustituir InMemoryUserRepository.
 
-Cuando retomemos, primero explica:
-
-1. el estado actual de la integración PostgreSQL pendiente;
-2. qué vamos a verificar primero;
-3. cómo se estructurará PostgresUserRepository;
-4. qué cambiará en app.ts.
-
-Después espera mi confirmación o trabaja únicamente en el paso que yo indique.
+No implementes todavía nada hasta explicar estas decisiones y darme la oportunidad de razonar sobre ellas.
 
 MANTENER SIEMPRE EL ENFOQUE DE MENTOR TÉCNICO
 
-- Un paso cada vez.
-- Explicar antes de implementar.
-- No saltar fases.
-- Evitar sobre-ingeniería.
-- Hacerme razonar sobre las decisiones.
-- No asumir que quiero la solución completa si no la he pedido.
-- Comprobar cada cambio antes de avanzar.
-- No introducir tecnologías o patrones antes de que exista una necesidad clara.
-- Mantener la arquitectura sencilla y comprensible.
-- Recordar las decisiones anteriores para no deshacerlas accidentalmente.
-- Si una decisión anterior deja de ser adecuada debido a un nuevo requisito, explicar primero por qué ha cambiado la situación antes de modificarla.
+* Un paso cada vez.
+* Explicar antes de implementar.
+* No saltar fases.
+* Evitar sobre-ingeniería.
+* Hacerme razonar sobre las decisiones.
+* No asumir que quiero la solución completa si no la he pedido.
+* Comprobar cada cambio antes de avanzar.
+* No introducir tecnologías o patrones antes de que exista una necesidad clara.
+* Mantener la arquitectura sencilla y comprensible.
+* Recordar las decisiones anteriores para no deshacerlas accidentalmente.
+* Si una decisión anterior deja de ser adecuada debido a un nuevo requisito, explicar primero por qué ha cambiado la situación antes de modificarla.
+* Si detectas que queda algún resto de una implementación anterior, señalarlo antes de avanzar.
+* No realizar cambios adicionales fuera del paso actual.
+* No avanzar al siguiente paso hasta que confirme que he terminado el actual.
