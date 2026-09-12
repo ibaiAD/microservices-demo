@@ -1,8 +1,9 @@
 import express from "express";
 
 import { UsersController } from "./controllers/users.controller.js";
+import pool from "./infrastructure/database/postgres.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
-import { InMemoryUserRepository } from "./repositories/InMemoryUserRepository.js";
+import { PostgresUserRepository } from "./repositories/PostgresUserRepository.js";
 import type { UserRepository } from "./repositories/UserRepository.js";
 import healthRoutes from "./routes/health.routes.js";
 import { createUsersRoutes } from "./routes/users.routes.js";
@@ -14,7 +15,7 @@ app.use(express.json());
 
 app.use(healthRoutes);
 
-const userRepository: UserRepository = new InMemoryUserRepository();
+const userRepository: UserRepository = new PostgresUserRepository(pool);
 const usersService = new UsersService(userRepository);
 const usersController = new UsersController(usersService);
 app.use(createUsersRoutes(usersController));

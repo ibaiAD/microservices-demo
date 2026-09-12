@@ -100,7 +100,7 @@ Actualmente estamos trabajando únicamente en users-service.
 
 Los demás microservicios todavía no son el foco.
 
-Estructura actual de users-service:
+ESTRUCTURA ACTUAL DE USERS-SERVICE
 
 src/
 ├── controllers/
@@ -115,23 +115,9 @@ src/
 └── utils/
 
 scripts/
-└── test-postgres.ts
-
-La arquitectura actual es:
-
-request
-↓
-routes
-↓
-middlewares
-↓
-controllers
-↓
-services
-↓
-repositories
-↓
-persistence
+├── test-postgres.ts
+├── test-postgres-repository.ts
+└── create-users-table.sql
 
 VALIDACIÓN
 
@@ -177,6 +163,7 @@ Existe:
 src/utils/asyncHandler.ts
 
 Los controllers se envuelven desde las rutas con asyncHandler.
+
 La adaptación a Express pertenece a la capa HTTP.
 
 REPOSITORY PATTERN
@@ -191,37 +178,7 @@ findAll(): Promise<User[]>;
 findById(id: string): Promise<User | undefined>;
 }
 
-La implementación que se utilizó inicialmente es InMemoryUserRepository y actualmente sigue existiendo.
-
-src/repositories/InMemoryUserRepository.ts
-
-Implementa UserRepository.
-
-La implementación actual es:
-
-export class InMemoryUserRepository implements UserRepository {
-constructor(private users: User[] = []) {}
-
-async save(user: User): Promise<User> {
-this.users.push(user);
-return user;
-}
-
-async findAll(): Promise<User[]> {
-return [...this.users];
-}
-
-async findById(id: string): Promise<User | undefined> {
-return this.users.find((user) => user.id === id);
-}
-}
-
-Todos los métodos son async para cumplir el contrato de UserRepository.
-
-Decisión:
-
-* el contrato async fue introducido como preparación para una persistencia real (PostgreSQL);
-* InMemoryUserRepository se adaptó para cumplir el contrato sin cambiar su comportamiento observable.
+El contrato es asíncrono porque la persistencia real utiliza PostgreSQL.
 
 DECISIONES SOBRE EL CONTRATO DEL REPOSITORY
 
@@ -278,13 +235,38 @@ save()
 
 never no es un tipo apropiado para representar un posible fallo de persistencia.
 
+El repository deja propagarse los errores de PostgreSQL.
+
 ENCAPSULACIÓN DEL IN-MEMORY REPOSITORY
 
-No devolvemos directamente:
+InMemoryUserRepository sigue existiendo:
 
-return this.users;
+src/repositories/InMemoryUserRepository.ts
 
-sino:
+Implementa UserRepository.
+
+Implementación:
+
+export class InMemoryUserRepository implements UserRepository {
+constructor(private users: User[] = []) {}
+
+async save(user: User): Promise<User> {
+this.users.push(user);
+return user;
+}
+
+async findAll(): Promise<User[]> {
+return [...this.users];
+}
+
+async findById(id: string): Promise<User | undefined> {
+return this.users.find((user) => user.id === id);
+}
+}
+
+Todos los métodos son async para cumplir el contrato.
+
+findAll devuelve una copia superficial del array:
 
 return [...this.users];
 
@@ -294,25 +276,25 @@ Evitar que código externo pueda modificar directamente el array interno mediant
 
 repository.findAll().push(user);
 
-Con la copia superficial, esa operación modifica únicamente la copia.
+No se utiliza copia profunda porque no es necesaria actualmente.
 
-Actualmente NO hemos introducido copia profunda de los objetos User.
+IMPORTANTE:
 
-Decisión:
+InMemoryUserRepository ya NO es la implementación utilizada por app.ts.
 
-* no añadir complejidad adicional mientras no sea necesaria.
+Sigue existiendo como implementación alternativa, pero no debe eliminarse todavía sin una razón explícita.
 
-PERSISTENCIA: PREPARACIÓN PARA POSTGRESQL
+POSTGRESQL
 
-La infraestructura PostgreSQL ya está preparada y su conectividad ya ha sido verificada, pero todavía NO está integrada en la aplicación.
+La infraestructura PostgreSQL está preparada e integrada en users-service.
 
-Existe en la raíz del proyecto:
+Existe en la raíz:
 
 docker-compose.yml
 
 Define un contenedor PostgreSQL 18.
 
-Las variables utilizadas por Docker Compose están separadas explícitamente para users-service.
+Las variables de Docker Compose están separadas explícitamente para users-service.
 
 Existe en la raíz:
 
@@ -330,21 +312,21 @@ También existe:
 
 Con las mismas variables pero sin valores.
 
-La razón de utilizar nombres USERS_POSTGRES_* en el .env raíz es dejar claro que actualmente estas variables pertenecen a users-service y evitar ambigüedad cuando posteriormente existan otros servicios con sus propias bases de datos.
+Docker Compose carga automáticamente el .env situado en la raíz.
 
-Docker Compose carga automáticamente el .env situado en la raíz, por lo que ahora se puede ejecutar:
+Se puede ejecutar:
 
 docker compose up -d
 
-sin necesidad de utilizar:
+sin necesidad de:
 
 docker compose --env-file services/users-service/.env up -d
 
+SERVICES/USERS-SERVICE ENV
+
 services/users-service/.env
 
-Se mantiene separado porque pertenece a la configuración que utiliza la aplicación Node cuando se ejecuta localmente.
-
-Actualmente contiene:
+Contiene:
 
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
@@ -352,19 +334,19 @@ POSTGRES_DB=users_db
 POSTGRES_USER=users_user
 POSTGRES_PASSWORD=users_password
 
-La decisión actual es mantener nombres genéricos POSTGRES_* dentro de users-service porque son variables directamente relacionadas con la configuración del Pool de PostgreSQL de la aplicación.
-
 services/users-service/.env.example
 
-Se mantiene como plantilla para la configuración local de users-service.
+Se mantiene como plantilla para la configuración local.
 
-INFRAESTRUCTURA POSTGRESQL
+La decisión actual es mantener nombres genéricos POSTGRES_* dentro de users-service porque son variables directamente relacionadas con la configuración del Pool de PostgreSQL de la aplicación.
+
+INFRAESTRUCTURA POSTGRES
 
 Existe:
 
 services/users-service/src/infrastructure/database/postgres.ts
 
-Exporta un Pool de pg configurado con las variables de entorno:
+Contenido conceptual:
 
 import { Pool } from "pg";
 
@@ -378,27 +360,21 @@ password: process.env.POSTGRES_PASSWORD,
 
 export default pool;
 
+El Pool funciona correctamente.
+
 Existe:
 
 services/users-service/scripts/test-postgres.ts
 
-El script verifica la conectividad mediante:
+El script utiliza:
 
 const res = await pool.query("SELECT 1");
 
-y posteriormente cierra el pool con:
+y posteriormente:
 
 await pool.end();
 
-Se ejecuta con:
-
-node --env-file=.env --import=tsx scripts/test-postgres.ts
-
-La prueba ya se ha ejecutado correctamente y devuelve:
-
-[ { '?column?': 1 } ]
-
-Por tanto, está verificado que:
+Se comprobó correctamente:
 
 .env de users-service
 ↓
@@ -410,119 +386,279 @@ PostgreSQL en Docker
 ↓
 SELECT 1
 
-funciona correctamente.
-
-También se ha verificado que:
-
-docker compose up -d
-
-funciona correctamente desde el proyecto sin --env-file y que el contenedor PostgreSQL queda en estado Up.
-
 DEPENDENCIAS
 
 Se han añadido:
 
-* pg (^8.23.0): cliente PostgreSQL para Node.js
-* @types/pg (^8.23.1): tipos para TypeScript
+* pg (^8.23.0)
+* @types/pg (^8.23.1)
 
 SCRIPTS DE PACKAGE.JSON
 
-Actualmente se utiliza:
+Actualmente:
 
 "dev": "node --env-file=.env --import=tsx --watch src/server.ts"
 "start": "node --env-file=.env dist/server.js"
 
+No se utiliza dotenv.
+
+Node carga las variables mediante:
+
+node --env-file=.env
+
+TABLA USERS
+
+Se creó la tabla PostgreSQL mediante:
+
+services/users-service/scripts/create-users-table.sql
+
+Contenido conceptual:
+
+CREATE TABLE users (
+id UUID PRIMARY KEY,
+name VARCHAR NOT NULL,
+email VARCHAR NOT NULL UNIQUE
+);
+
+La estructura verificada mediante \d users es:
+
+Table "public.users"
+Column | Type | Nullable | Default
+id | uuid | not null |
+name | character varying | not null |
+email | character varying | not null |
+
+Índices:
+
+users_pkey PRIMARY KEY, btree (id)
+users_email_key UNIQUE CONSTRAINT, btree (email)
+
+DECISIONES SOBRE LA TABLA
+
+La entidad User actual es:
+
+id: string;
+name: string;
+email: string;
+
+Correspondencia PostgreSQL:
+
+id → UUID
+name → VARCHAR
+email → VARCHAR
+
+Restricciones:
+
+id → PRIMARY KEY
+name → NOT NULL
+email → NOT NULL UNIQUE
+
+El UUID lo genera Node/UsersService.
+
+PostgreSQL NO genera el UUID mediante DEFAULT.
+
+Se decidió que email debe ser UNIQUE desde el principio porque representa una invariante de persistencia razonable.
+
+Todavía NO se ha decidido ningún tratamiento especial para mayúsculas/minúsculas de email. Por ahora se utiliza el comportamiento normal de PostgreSQL.
+
+No se han añadido:
+
+* created_at
+* updated_at
+* deleted_at
+* version
+* índices adicionales
+* relaciones
+* migraciones
+* ORM
+
+No introducir estas cosas hasta que exista una necesidad real.
+
+POSTGRES USER REPOSITORY
+
+Ya existe:
+
+src/repositories/PostgresUserRepository.ts
+
+Implementa:
+
+UserRepository
+
+Recibe un Pool mediante constructor.
+
+La dependencia se inyecta así:
+
+constructor(private pool: Pool) {}
+
+No importa directamente el pool desde postgres.ts.
+
+Esto se decidió porque app.ts es el Composition Root y estamos haciendo Dependency Injection manual.
+
+No se utiliza contenedor DI.
+
+Implementación conceptual actual:
+
+import { Pool } from "pg";
+import { User } from "../types/User.js";
+import { UserRepository } from "./UserRepository.js";
+
+export class PostgresUserRepository implements UserRepository {
+constructor(private pool: Pool) {}
+
+async save(user: User): Promise<User> {
+const result = await this.pool.query<User>(
+`INSERT INTO users (id, name, email)
+VALUES ($1, $2, $3)
+RETURNING id, name, email`,
+[user.id, user.name, user.email]
+);
+
+const savedUser = result.rows[0];
+
+if (!savedUser) {
+throw new Error("User was inserted but could not be retrieved");
+}
+
+return savedUser;
+}
+
+async findAll(): Promise<User[]> {
+const result = await this.pool.query<User>(
+`SELECT id, name, email
+FROM users`
+);
+
+return result.rows;
+}
+
+async findById(id: string): Promise<User | undefined> {
+const result = await this.pool.query<User>(
+`SELECT id, name, email
+FROM users
+WHERE id = $1`,
+[id]
+);
+
+return result.rows[0];
+}
+}
+
+IMPORTANTE SOBRE LOS ERRORES DEL REPOSITORY
+
+PostgresUserRepository NO conoce AppError.
+
+Si PostgreSQL lanza un error de persistencia:
+
+save()
+↓
+PostgreSQL error
+↓
+throw
+
+El repository deja propagarse el error.
+
+Si un INSERT correcto no devuelve ninguna fila mediante RETURNING, el repository lanza un Error genérico:
+
+throw new Error("User was inserted but could not be retrieved");
+
 Motivo:
 
-* node --env-file=.env carga las variables de entorno sin necesidad de dotenv u otras dependencias;
-* disponible desde Node.js 20.6+.
+* es una inconsistencia inesperada de infraestructura;
+* AppError contiene conceptos de aplicación/HTTP;
+* la capa de persistencia no debe conocer HTTP ni statusCode.
 
-ESTADO ACTUAL DE LA INTEGRACIÓN CON POSTGRESQL
+Todavía NO hemos decidido cómo traducir los errores específicos de PostgreSQL, como una violación de UNIQUE, a errores de aplicación.
 
-La infraestructura PostgreSQL está preparada y verificada.
+Esto es precisamente el siguiente problema que debemos estudiar.
 
-Ya se ha comprobado:
+PRUEBA AISLADA DEL REPOSITORY
 
-1. PostgreSQL arranca correctamente mediante Docker Compose.
-2. Docker Compose encuentra automáticamente las variables del .env raíz.
-3. El contenedor PostgreSQL queda operativo.
-4. El Pool de pg puede conectarse desde users-service.
-5. SELECT 1 funciona correctamente.
+Existe:
 
-Todavía falta:
+services/users-service/scripts/test-postgres-repository.ts
 
-1. Diseñar la estructura de PostgresUserRepository.
-2. Implementar PostgresUserRepository para que cumpla el contrato UserRepository.
-3. Crear la estructura de persistencia necesaria en PostgreSQL, cuando corresponda.
-4. Intercambiar InMemoryUserRepository por PostgresUserRepository en app.ts.
-5. Comprobar que los endpoints siguen funcionando con persistencia real.
+Se utiliza para comprobar de forma aislada:
 
-IMPORTANTE:
+* save()
+* findAll()
+* findById() existente
+* findById() inexistente
 
-* No existe todavía PostgresUserRepository.
-* app.ts todavía utiliza InMemoryUserRepository.
-* PostgreSQL todavía no forma parte del flujo HTTP de la aplicación.
-* No debemos asumir que necesitamos migraciones, ORM, factories, contenedores DI u otras herramientas sin una necesidad concreta.
-* No introducir una capa adicional para la configuración mientras no exista una razón real.
+La prueba genera UUID mediante:
 
-USERS SERVICE
+import { randomUUID } from "node:crypto";
 
-Implementación actual de UsersService:
+Genera el usuario así:
 
-src/services/users.service.ts
+const userId = randomUUID();
 
-Todos los métodos son async:
+const userToInsert: User = {
+id: userId,
+name: "Tester",
+email: `tester-${userId}@test.com`,
+};
 
-* createUser(userData): Promise<User>
-* getUsers(): Promise<User[]>
-* getUserById(id): Promise<User>
+La prueba utiliza await en todas las operaciones.
 
-El service:
+Se ejecuta mediante:
 
-* genera UUID;
-* construye el User;
-* aplica reglas de negocio;
-* delega persistencia al repository;
-* no conoce la implementación concreta del repository;
-* no conoce HTTP;
-* no conoce Express.
+node --env-file=.env --import=tsx scripts/test-postgres-repository.ts
 
-USERS CONTROLLER
+Se verificó correctamente:
 
-src/controllers/users.controller.ts
+save() → User
+findAll() → User[]
+findById(existing) → User
+findById(nonExisting) → undefined
 
-Todos los métodos son async y utilizan await:
+También se comprobó que la persistencia es real porque los datos sobrevivieron a la ejecución del script.
 
-* createNewUser(req, res): await this.usersService.createUser(...)
-* getAllUsers(req, res): await this.usersService.getUsers()
-* getUser(req, res): await this.usersService.getUserById(...)
+Después se eliminaron explícitamente los usuarios de prueba:
 
-El controller conoce Express y delega la lógica al service.
+DELETE FROM users WHERE email LIKE 'tester-%@test.com';
 
-USERS ROUTES
+La base quedó limpia.
 
-src/routes/users.routes.ts
+ESTADO ACTUAL DE APP.TS
 
-Se exporta:
-
-createUsersRoutes(usersController)
-
-Utiliza asyncHandler + bind para adaptar los controllers async a Express.
-
-APP.TS / COMPOSITION ROOT
-
-src/app.ts
-
-Ensambla actualmente las dependencias:
+Antes:
 
 const userRepository: UserRepository = new InMemoryUserRepository();
-const usersService = new UsersService(userRepository);
-const usersController = new UsersController(usersService);
-app.use(createUsersRoutes(usersController));
 
-Todavía no se ha introducido PostgresUserRepository aquí.
+Ahora:
 
-FLUJO ACTUAL COMPLETO
+const userRepository: UserRepository = new PostgresUserRepository(pool);
+
+Se importan:
+
+import pool from "./infrastructure/database/postgres.js";
+import { PostgresUserRepository } from "./repositories/PostgresUserRepository.js";
+
+El resto de app.ts no se modificó.
+
+La composición actual es:
+
+Pool
+↓
+PostgresUserRepository
+↓
+UserRepository
+↓
+UsersService
+↓
+UsersController
+↓
+Routes
+
+No se ha modificado UsersService para introducir PostgreSQL.
+
+No se ha modificado UsersController.
+
+No se han modificado las rutas.
+
+No se ha modificado la API externa.
+
+FLUJO HTTP ACTUAL
 
 HTTP request
 ↓
@@ -530,29 +666,7 @@ Express
 ↓
 Route
 ↓
-validateCreateUser (cuando corresponde)
-↓
-asyncHandler
-↓
-UsersController (async, con await)
-↓
-UsersService (async, con await)
-↓
-UserRepository (contrato async)
-↓
-InMemoryUserRepository (async, array en memoria)
-↓
-User[]
-
-FLUJO OBJETIVO INMEDIATO
-
-HTTP request
-↓
-Express
-↓
-Route
-↓
-validateCreateUser
+validateCreateUser cuando corresponde
 ↓
 asyncHandler
 ↓
@@ -564,9 +678,49 @@ UserRepository
 ↓
 PostgresUserRepository
 ↓
+pg Pool
+↓
 PostgreSQL
 
-La transición de InMemoryUserRepository a PostgresUserRepository debe hacerse sin cambiar la API externa salvo que exista una razón explícita.
+VERIFICACIÓN DE LA INTEGRACIÓN
+
+Después de cambiar app.ts se comprobó que la API sigue funcionando.
+
+Se verificó:
+
+* GET /users
+* POST /users
+* GET /users
+* GET /users/:id
+* persistencia después de reiniciar users-service
+
+Los usuarios sobreviven al reinicio del proceso porque ahora están almacenados en PostgreSQL.
+
+La API externa no cambió.
+
+ESTADO EXACTO ACTUAL
+
+La migración de users-service desde InMemoryUserRepository a PostgreSQL está TERMINADA.
+
+PostgreSQL está integrado en el flujo HTTP.
+
+InMemoryUserRepository sigue existiendo, pero ya no se utiliza desde app.ts.
+
+No hay Dockerfile para users-service todavía.
+
+No hay migraciones.
+
+No hay ORM.
+
+No hay contenedor DI.
+
+No hay factories.
+
+No hay capa adicional de configuración.
+
+No hay mapper entre filas y User porque actualmente las columnas coinciden directamente con User.
+
+No añadir estas abstracciones hasta que exista una necesidad clara.
 
 DECISIONES ARQUITECTÓNICAS YA TOMADAS
 
@@ -574,76 +728,105 @@ No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una 
 
 1. El service utiliza Repository Pattern.
 2. El repository se define mediante una interfaz.
-3. El contrato del repository es asíncrono (Promise<...>).
-4. InMemoryUserRepository es la implementación actual hasta que la sustituyamos explícitamente.
-5. UsersService depende de UserRepository, no de InMemoryUserRepository.
-6. UsersController depende de UsersService.
-7. app.ts actúa como Composition Root.
-8. Dependency Injection se hace manualmente.
-9. No se utiliza ningún contenedor DI.
-10. Los controllers se adaptan a Express mediante asyncHandler desde las rutas.
-11. Los controllers son async con await sobre las llamadas al service.
-12. Los services son async con await sobre las llamadas al repository.
-13. findById devuelve Promise<User | undefined>.
-14. El service transforma un usuario inexistente en NotFoundError.
-15. Los repositories no conocen HTTP.
-16. El service no conoce Express.
-17. El DTO pertenece al límite de entrada de la aplicación; el repository trabaja con User.
-18. La persistencia actual sigue siendo un array en memoria, pero el contrato ya es async.
-19. La infraestructura PostgreSQL está preparada y su conectividad ya ha sido verificada.
-20. Las variables de entorno se cargan con node --env-file, sin dependencias externas.
-21. No se ha creado PostgresUserRepository todavía.
-22. No introducir factories, DI containers ni otras abstracciones mientras no sean necesarias.
-23. No añadir complejidad de encapsulación adicional, como deep cloning, mientras no exista una necesidad real.
-24. No convertir clases o funciones simplemente por seguir un patrón; las decisiones deben responder a una necesidad concreta.
-25. El controller se ha convertido en clase porque necesita conservar su dependencia con UsersService.
-26. Las rutas reciben el controller mediante createUsersRoutes(usersController).
-27. app.ts construye manualmente las dependencias.
-28. bind se realiza en las rutas y no dentro del controller.
-29. El repository trabaja con User, no con CreateUserDto.
-30. Los errores de negocio, como usuario no encontrado, se deciden en el service y no en el repository.
-31. La API externa no debe cambiar como consecuencia de refactorizaciones internas salvo que se decida explícitamente.
-32. El .env raíz contiene variables destinadas a Docker Compose y utiliza nombres USERS_POSTGRES_* para dejar claro que pertenecen a users-service.
-33. El .env de users-service contiene las variables POSTGRES_* que consume directamente la aplicación Node.
-34. No introducir todavía Dockerfile para users-service; se hará cuando exista la necesidad real de ejecutar el microservicio dentro de Docker.
+3. El contrato del repository es asíncrono.
+4. InMemoryUserRepository fue la implementación inicial.
+5. InMemoryUserRepository sigue existiendo como implementación alternativa, pero ya no es utilizada por app.ts.
+6. UsersService depende de UserRepository, no de una implementación concreta.
+7. UsersController depende de UsersService.
+8. app.ts actúa como Composition Root.
+9. Dependency Injection se hace manualmente.
+10. No se utiliza ningún contenedor DI.
+11. Los controllers se adaptan a Express mediante asyncHandler desde las rutas.
+12. Los controllers son async con await sobre las llamadas al service.
+13. Los services son async con await sobre las llamadas al repository.
+14. findById devuelve Promise<User | undefined>.
+15. El service transforma un usuario inexistente en NotFoundError.
+16. Los repositories no conocen HTTP.
+17. El service no conoce Express.
+18. El DTO pertenece al límite de entrada de la aplicación.
+19. El repository trabaja con User, no con CreateUserDto.
+20. El repository no genera UUIDs.
+21. UsersService genera el UUID y construye User.
+22. Los errores de negocio, como usuario no encontrado, se deciden en el service.
+23. Los errores de persistencia se propagan desde el repository.
+24. AppError pertenece a la capa de aplicación y no debe introducirse en el repository.
+25. El repository recibe el Pool mediante inyección de dependencias.
+26. No se importa directamente el Pool dentro de PostgresUserRepository.
+27. El Pool se proporciona desde el Composition Root.
+28. Las queries SQL utilizan parámetros ($1, $2, etc.).
+29. save utiliza INSERT ... RETURNING.
+30. findAll utiliza SELECT explícito de id, name y email.
+31. findById utiliza SELECT con WHERE id = $1.
+32. findById devuelve undefined cuando no existe el usuario.
+33. save devuelve User si la persistencia tiene éxito.
+34. save lanza un Error genérico si INSERT termina correctamente pero RETURNING no devuelve ninguna fila.
+35. No se utilizan ! para ocultar el posible undefined de result.rows[0].
+36. PostgreSQL utiliza UUID para id.
+37. id es PRIMARY KEY.
+38. name es NOT NULL.
+39. email es NOT NULL.
+40. email es UNIQUE.
+41. El UUID lo genera Node, no PostgreSQL.
+42. No se ha añadido comportamiento especial para emails con mayúsculas/minúsculas.
+43. No se ha añadido created_at, updated_at, deleted_at ni version.
+44. No se han añadido índices adicionales.
+45. No se han añadido migraciones todavía.
+46. No se ha añadido ORM.
+47. No se ha añadido Dockerfile para users-service.
+48. Las variables de Docker Compose utilizan USERS_POSTGRES_* en el .env raíz.
+49. Las variables que consume directamente Node dentro de users-service son POSTGRES_*.
+50. node --env-file=.env se utiliza para cargar variables de entorno.
+51. No se utiliza dotenv.
+52. La API externa no debe cambiar como consecuencia de refactorizaciones internas salvo que exista una razón explícita.
+53. No introducir factories, contenedores DI ni otras abstracciones mientras no sean necesarias.
+54. No introducir deep cloning mientras no exista una necesidad real.
+55. No introducir clases, patrones o capas simplemente porque sea posible.
+56. Mantener la arquitectura sencilla y comprensible.
 
-VERIFICACIONES REALIZADAS
+SIGUIENTE PASO EXACTO
 
-Se ha comprobado que:
+El siguiente problema que debemos estudiar es el comportamiento ante un email duplicado.
 
-* GET /users funciona.
-* GET /users devuelve [] inicialmente.
-* POST /users crea usuarios correctamente.
-* GET /users devuelve los usuarios creados.
-* GET /users/:id devuelve usuarios existentes.
-* GET /users/abc devuelve {"message":"User not found"} con HTTP 404.
-* La refactorización a contrato async no cambió el comportamiento externo de la API.
-* PostgreSQL arranca correctamente con Docker Compose.
-* docker compose up -d funciona sin --env-file.
-* PostgreSQL queda en estado Up.
-* El Pool de pg puede conectarse correctamente.
-* SELECT 1 devuelve [ { '?column?': 1 } ].
+Actualmente existe esta restricción:
 
-PUNTO EXACTO DONDE CONTINUAR
+email VARCHAR NOT NULL UNIQUE
 
-La verificación de infraestructura PostgreSQL está terminada.
+Por tanto:
 
-El siguiente paso lógico es trabajar únicamente en el diseño de PostgresUserRepository.
+POST /users
+↓
+UsersService
+↓
+PostgresUserRepository.save()
+↓
+INSERT
+↓
+email duplicado
+↓
+PostgreSQL lanza error de UNIQUE constraint
 
-Antes de escribir código, explica:
+Todavía NO sabemos si la aplicación está tratando este error correctamente.
 
-1. qué responsabilidad tendrá PostgresUserRepository;
-2. cómo cumplirá exactamente el contrato actual de UserRepository;
-3. qué operaciones SQL necesita para implementar save, findAll y findById;
-4. qué estructura mínima necesitamos en PostgreSQL para persistir User;
-5. qué alternativas razonables existen para crear la tabla y cuál recomiendas para este proyecto;
-6. qué cambiará posteriormente en app.ts para sustituir InMemoryUserRepository.
+El siguiente paso debe ser:
 
-No implementes todavía nada hasta explicar estas decisiones y darme la oportunidad de razonar sobre ellas.
+1. Explicar qué ocurre actualmente cuando se intenta crear un usuario con un email ya existente.
+2. Hacerme pensar qué capa debería interpretar ese error.
+3. Explicar qué información proporciona PostgreSQL/pg sobre una violación de UNIQUE.
+4. Decidir si necesitamos un nuevo error de aplicación, probablemente relacionado con conflicto de datos.
+5. Decidir dónde debe hacerse la traducción del error.
+6. Solo después implementar el cambio mínimo necesario.
+7. Probarlo mediante HTTP.
+8. No anticipar todavía otros tipos de errores de PostgreSQL.
+
+IMPORTANTE:
+
+No implementes directamente el manejo del error de email duplicado sin antes explicar el problema y hacerme razonar sobre la responsabilidad de cada capa.
+
+No avances a otros problemas hasta terminar este paso.
 
 MANTENER SIEMPRE EL ENFOQUE DE MENTOR TÉCNICO
 
-* Un paso cada vez.
+* Un solo paso cada vez.
 * Explicar antes de implementar.
 * No saltar fases.
 * Evitar sobre-ingeniería.
@@ -654,6 +837,7 @@ MANTENER SIEMPRE EL ENFOQUE DE MENTOR TÉCNICO
 * Mantener la arquitectura sencilla y comprensible.
 * Recordar las decisiones anteriores para no deshacerlas accidentalmente.
 * Si una decisión anterior deja de ser adecuada debido a un nuevo requisito, explicar primero por qué ha cambiado la situación antes de modificarla.
-* Si detectas que queda algún resto de una implementación anterior, señalarlo antes de avanzar.
+* Si detectas restos de una implementación anterior, señalarlos antes de avanzar.
 * No realizar cambios adicionales fuera del paso actual.
 * No avanzar al siguiente paso hasta que confirme que he terminado el actual.
+* El punto exacto de continuación es el manejo del error producido por la restricción UNIQUE de email.
