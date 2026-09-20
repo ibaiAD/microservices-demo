@@ -12,7 +12,6 @@ Objetivo:
 * Solo un paso por respuesta.
 * No avances al siguiente paso hasta que confirme que he terminado el actual.
 * Antes de escribir código, explica brevemente:
-
   * cuál es el objetivo del paso;
   * qué problema resuelve;
   * qué decisión arquitectónica estamos tomando y por qué.
@@ -34,6 +33,10 @@ REGLAS IMPORTANTES DE TRABAJO
 * Si una decisión puede esperar hasta que exista una necesidad real, no la anticipes.
 * Quiero participar en las decisiones. Siempre que sea razonable, hazme pensar primero antes de darme la solución.
 * Si te pido directamente la solución, puedes proporcionármela, pero explica antes por qué es la solución elegida.
+* No avances al siguiente paso hasta que confirme que he terminado el actual.
+* Si una decisión anterior deja de ser adecuada debido a un nuevo requisito, explica primero por qué ha cambiado la situación antes de modificarla.
+* No introducir tecnologías o patrones antes de que exista una necesidad clara.
+* No hacer cambios adicionales fuera del paso actual.
 
 PROYECTO
 
@@ -68,37 +71,15 @@ TECNOLOGÍAS
 * Axios para comunicación HTTP entre servicios
 * UUID para generación de IDs
 
-ARQUITECTURA OBJETIVO
-
-Cada microservicio debe ser independiente.
-
-El API Gateway será el único punto de entrada externo.
-
-Comunicación:
-
-* HTTP para consultas síncronas.
-* Kafka para eventos desacoplados.
-
-Estructura por capas:
-
-routes
-controllers
-services
-repositories
-
-Patrones que se introducirán progresivamente y solo cuando sean necesarios:
-
-* DTOs
-* Middleware
-* Error handling centralizado
-* Repository Pattern
-* Event-driven architecture con Kafka
-
-ESTADO GENERAL DEL PROYECTO
+IMPORTANTE SOBRE EL ESTADO DEL PROYECTO
 
 Actualmente estamos trabajando únicamente en users-service.
 
 Los demás microservicios todavía no son el foco.
+
+El punto exacto de continuación está al introducir Zod para validar CreateUserDto.
+
+NO AVANZAR TODAVÍA A OTROS TEMAS.
 
 ESTRUCTURA ACTUAL DE USERS-SERVICE
 
@@ -119,15 +100,227 @@ scripts/
 ├── test-postgres-repository.ts
 └── create-users-table.sql
 
-VALIDACIÓN
+VALIDACIÓN ACTUAL
 
-Existe middleware:
+Existe:
 
 src/middlewares/validateCreateUser.ts
 
-Responsabilidad:
+Actualmente:
 
-* validar los datos necesarios para crear un usuario.
+import type { NextFunction, Request, Response } from "express";
+import type { CreateUserDto } from "../types/user.js";
+
+export function validateCreateUser(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const user: CreateUserDto = req.body;
+  if (!user.name || !user.email) {
+    return res.status(400).json({
+      error: "name and email are required",
+    });
+  }
+
+  next();
+}
+
+La validación se aplica desde users.routes.ts:
+
+router.post(
+  "/users",
+  validateCreateUser,
+  asyncHandler(usersController.createNewUser.bind(usersController)),
+);
+
+DECISIÓN SOBRE LA VALIDACIÓN
+
+Hemos decidido que las validaciones relacionadas con la entrada HTTP deben estar en el middleware.
+
+Ejemplos de validaciones que pertenecen al middleware:
+
+* name obligatorio;
+* name string;
+* name no vacío;
+* email obligatorio;
+* email string;
+* email no vacío;
+* formato básico de email, si decidimos exigirlo.
+
+Las reglas que dependen del estado de la aplicación o de la base de datos no pertenecen al middleware.
+
+Por ejemplo:
+
+email ya existente
+↓
+Repository/PostgreSQL
+↓
+ConflictError
+↓
+HTTP 409
+
+No debemos mover esa lógica al middleware.
+
+DECISIÓN SOBRE LIBRERÍA DE VALIDACIÓN
+
+Hemos decidido introducir una librería de validación para no escribir manualmente lógica de validación mediante muchos if.
+
+La librería elegida es Zod.
+
+Motivo:
+
+* permite definir el esquema de validación de forma declarativa;
+* permite relacionar el esquema runtime con los tipos de TypeScript;
+* evita tener dos fuentes de verdad independientes;
+* es suficiente para el tamaño actual del proyecto;
+* no queremos introducir clases, decoradores ni una arquitectura de validación compleja.
+
+Se han considerado otras alternativas como Joi, Yup o express-validator, pero para este proyecto se ha elegido Zod.
+
+IMPORTANTE:
+
+La decisión ya está tomada.
+
+El siguiente paso exacto será introducir Zod.
+
+TODAVÍA NO SE HA HECHO LA IMPLEMENTACIÓN.
+
+ÚLTIMO ESTADO ANTES DE PAUSAR
+
+Se decidió:
+
+1. Instalar Zod en users-service.
+2. Definir posteriormente un schema para CreateUserDto.
+3. El schema será la fuente de verdad para la validación runtime.
+4. El tipo CreateUserDto debería derivarse del schema para evitar duplicación.
+5. Después se modificará validateCreateUser para utilizar Zod.
+6. Se probarán peticiones HTTP válidas e inválidas.
+7. No se modificarán UsersController ni UsersService durante el primer paso de introducción de Zod.
+
+El usuario iba a ejecutar:
+
+cd services/users-service
+npm install zod
+
+y después:
+
+npm run build
+
+En el momento de pausar, todavía no sabemos si ya ejecutó esos comandos.
+
+Por tanto, al retomar:
+
+1. Preguntar/comprobar si Zod ya está instalado y si el proyecto compila.
+2. Si no está instalado, hacerlo como primer paso.
+3. Si ya está instalado y compila, no repetir la instalación.
+4. Después explicar el siguiente paso antes de escribir código.
+
+TIPOS ACTUALES
+
+Los tipos de usuario están en:
+
+services/users-service/src/types/user.ts
+
+Contenido actual:
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface CreateUserDto {
+  name: string;
+  email: string;
+}
+
+DECISIÓN SOBRE User Y CreateUserDto
+
+User representa la entidad de la aplicación:
+
+id
+name
+email
+
+CreateUserDto representa los datos provenientes de HTTP:
+
+name
+email
+
+No tienen el mismo propósito.
+
+El flujo es:
+
+CreateUserDto
+↓
+UsersService
+↓
+User + UUID
+↓
+Repository
+
+El cliente HTTP no decide el id.
+
+El repository recibe User, no CreateUserDto.
+
+No cambiar esta decisión.
+
+CONTROLLER ACTUAL
+
+src/controllers/UsersController.ts:
+
+import type { Request, Response } from "express";
+import type { UsersService } from "../services/users.service.js";
+import type { CreateUserDto, User } from "../types/user.js";
+
+export class UsersController {
+  constructor(private usersService: UsersService) {}
+
+  async createNewUser(req: Request, res: Response) {
+    const userData: CreateUserDto = req.body;
+    const newUser = await this.usersService.createUser(userData);
+
+    res.status(201).json(newUser);
+  }
+
+  async getAllUsers(_req: Request, res: Response) {
+    const users: User[] = await this.usersService.getUsers();
+
+    res.json(users);
+  }
+
+  async getUser(req: Request, res: Response) {
+    const id = req.params.id as string;
+
+    const user = await this.usersService.getUserById(id);
+
+    res.json(user);
+  }
+}
+
+IMPORTANTE SOBRE req.body Y TYPESCRIPT
+
+Hemos identificado que:
+
+const userData: CreateUserDto = req.body;
+
+NO valida runtime.
+
+La anotación TypeScript solo expresa un tipo estático.
+
+Por ejemplo, una petición como:
+
+{
+  "name": 123,
+  "email": true
+}
+
+podría pasar la validación actual porque validateCreateUser únicamente comprueba truthiness.
+
+Por eso estamos introduciendo Zod.
+
+No asumir que el tipo TypeScript por sí solo valida req.body.
 
 MANEJO DE ERRORES
 
@@ -135,7 +328,8 @@ Existe:
 
 src/errors/
 ├── AppError.ts
-└── NotFoundError.ts
+├── NotFoundError.ts
+└── ConflictError.ts
 
 AppError:
 
@@ -148,6 +342,24 @@ NotFoundError:
 * hereda de AppError;
 * utiliza HTTP 404.
 
+ConflictError se acaba de introducir:
+
+import { AppError } from "./AppError.js";
+
+export class ConflictError extends AppError {
+  constructor(message: string) {
+    super(409, message);
+  }
+}
+
+ConflictError representa un conflicto de aplicación y HTTP 409.
+
+No conoce PostgreSQL.
+
+No conoce Express.
+
+No contiene información específica de la constraint.
+
 ERROR HANDLER GLOBAL
 
 Existe:
@@ -155,6 +367,8 @@ Existe:
 src/middlewares/errorHandler.ts
 
 Está registrado al final de app.ts.
+
+El errorHandler ya ha demostrado que maneja correctamente ConflictError.
 
 ASYNC ERROR HANDLING
 
@@ -168,21 +382,23 @@ La adaptación a Express pertenece a la capa HTTP.
 
 REPOSITORY PATTERN
 
-El repository define un contrato asíncrono:
+Existe:
 
 src/repositories/UserRepository.ts
 
+Contrato:
+
 export interface UserRepository {
-save(user: User): Promise<User>;
-findAll(): Promise<User[]>;
-findById(id: string): Promise<User | undefined>;
+  save(user: User): Promise<User>;
+  findAll(): Promise<User[]>;
+  findById(id: string): Promise<User | undefined>;
 }
 
 El contrato es asíncrono porque la persistencia real utiliza PostgreSQL.
 
 DECISIONES SOBRE EL CONTRATO DEL REPOSITORY
 
-save recibe un User, no un CreateUserDto.
+save recibe User, no CreateUserDto.
 
 Motivo:
 
@@ -225,19 +441,16 @@ El repository NO conoce HTTP ni 404.
 
 ERRORES DE PERSISTENCIA
 
-No queremos utilizar undefined, null o never como mecanismo genérico de error para save.
+save():
 
-La decisión actual es:
+* éxito → User
+* error → throw error
 
-save()
-├── éxito → User
-└── error → throw error
+No se utiliza undefined, null o never como mecanismo genérico de error para save.
 
-never no es un tipo apropiado para representar un posible fallo de persistencia.
+El repository deja propagarse los errores de PostgreSQL salvo los errores específicos que hemos decidido traducir.
 
-El repository deja propagarse los errores de PostgreSQL.
-
-ENCAPSULACIÓN DEL IN-MEMORY REPOSITORY
+IN-MEMORY REPOSITORY
 
 InMemoryUserRepository sigue existiendo:
 
@@ -248,85 +461,61 @@ Implementa UserRepository.
 Implementación:
 
 export class InMemoryUserRepository implements UserRepository {
-constructor(private users: User[] = []) {}
+  constructor(private users: User[] = []) {}
 
-async save(user: User): Promise<User> {
-this.users.push(user);
-return user;
+  async save(user: User): Promise<User> {
+    this.users.push(user);
+    return user;
+  }
+
+  async findAll(): Promise<User[]> {
+    return [...this.users];
+  }
+
+  async findById(id: string): Promise<User | undefined> {
+    return this.users.find((user) => user.id === id);
+  }
 }
 
-async findAll(): Promise<User[]> {
-return [...this.users];
-}
+Todos los métodos son async.
 
-async findById(id: string): Promise<User | undefined> {
-return this.users.find((user) => user.id === id);
-}
-}
+findAll devuelve una copia superficial del array.
 
-Todos los métodos son async para cumplir el contrato.
+InMemoryUserRepository sigue existiendo como implementación alternativa, pero NO se utiliza desde app.ts.
 
-findAll devuelve una copia superficial del array:
-
-return [...this.users];
-
-Motivo:
-
-Evitar que código externo pueda modificar directamente el array interno mediante:
-
-repository.findAll().push(user);
-
-No se utiliza copia profunda porque no es necesaria actualmente.
-
-IMPORTANTE:
-
-InMemoryUserRepository ya NO es la implementación utilizada por app.ts.
-
-Sigue existiendo como implementación alternativa, pero no debe eliminarse todavía sin una razón explícita.
+No eliminarla sin una razón explícita.
 
 POSTGRESQL
 
-La infraestructura PostgreSQL está preparada e integrada en users-service.
+PostgreSQL está integrado en users-service.
 
 Existe en la raíz:
 
 docker-compose.yml
 
-Define un contenedor PostgreSQL 18.
+Define PostgreSQL 18.
 
-Las variables de Docker Compose están separadas explícitamente para users-service.
-
-Existe en la raíz:
-
-.env
-
-Contenido conceptual:
+Variables de Docker Compose:
 
 USERS_POSTGRES_DB=users_db
 USERS_POSTGRES_USER=users_user
 USERS_POSTGRES_PASSWORD=users_password
 
-También existe:
+Existe raíz .env y .env.example.
 
-.env.example
+Docker Compose carga automáticamente el .env de raíz.
 
-Con las mismas variables pero sin valores.
-
-Docker Compose carga automáticamente el .env situado en la raíz.
-
-Se puede ejecutar:
+Se utiliza:
 
 docker compose up -d
 
-sin necesidad de:
+No es necesario:
 
 docker compose --env-file services/users-service/.env up -d
 
 SERVICES/USERS-SERVICE ENV
 
-services/users-service/.env
-
-Contiene:
+services/users-service/.env:
 
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
@@ -334,28 +523,41 @@ POSTGRES_DB=users_db
 POSTGRES_USER=users_user
 POSTGRES_PASSWORD=users_password
 
-services/users-service/.env.example
+services/users-service/.env.example:
 
-Se mantiene como plantilla para la configuración local.
+Se mantiene como plantilla.
 
-La decisión actual es mantener nombres genéricos POSTGRES_* dentro de users-service porque son variables directamente relacionadas con la configuración del Pool de PostgreSQL de la aplicación.
+Se decidió mantener nombres genéricos POSTGRES_* dentro de users-service porque son variables directamente relacionadas con la configuración del Pool de PostgreSQL.
+
+NODE ENV
+
+package.json:
+
+"dev": "node --env-file=.env --import=tsx --watch src/server.ts"
+"start": "node --env-file=.env dist/server.js"
+
+No se utiliza dotenv.
+
+Node carga variables mediante:
+
+node --env-file=.env
 
 INFRAESTRUCTURA POSTGRES
 
 Existe:
 
-services/users-service/src/infrastructure/database/postgres.ts
+src/infrastructure/database/postgres.ts
 
 Contenido conceptual:
 
 import { Pool } from "pg";
 
 const pool = new Pool({
-host: process.env.POSTGRES_HOST,
-port: Number(process.env.POSTGRES_PORT),
-database: process.env.POSTGRES_DB,
-user: process.env.POSTGRES_USER,
-password: process.env.POSTGRES_PASSWORD,
+  host: process.env.POSTGRES_HOST,
+  port: Number(process.env.POSTGRES_PORT),
+  database: process.env.POSTGRES_DB,
+  user: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
 });
 
 export default pool;
@@ -364,9 +566,9 @@ El Pool funciona correctamente.
 
 Existe:
 
-services/users-service/scripts/test-postgres.ts
+scripts/test-postgres.ts
 
-El script utiliza:
+Utiliza:
 
 const res = await pool.query("SELECT 1");
 
@@ -374,9 +576,9 @@ y posteriormente:
 
 await pool.end();
 
-Se comprobó correctamente:
+Se comprobó:
 
-.env de users-service
+.env
 ↓
 Node.js
 ↓
@@ -386,257 +588,233 @@ PostgreSQL en Docker
 ↓
 SELECT 1
 
-DEPENDENCIAS
+DEPENDENCIAS POSTGRES
 
 Se han añadido:
 
 * pg (^8.23.0)
 * @types/pg (^8.23.1)
 
-SCRIPTS DE PACKAGE.JSON
-
-Actualmente:
-
-"dev": "node --env-file=.env --import=tsx --watch src/server.ts"
-"start": "node --env-file=.env dist/server.js"
-
-No se utiliza dotenv.
-
-Node carga las variables mediante:
-
-node --env-file=.env
-
 TABLA USERS
 
-Se creó la tabla PostgreSQL mediante:
+Existe:
 
-services/users-service/scripts/create-users-table.sql
+scripts/create-users-table.sql
 
 Contenido conceptual:
 
 CREATE TABLE users (
-id UUID PRIMARY KEY,
-name VARCHAR NOT NULL,
-email VARCHAR NOT NULL UNIQUE
+  id UUID PRIMARY KEY,
+  name VARCHAR NOT NULL,
+  email VARCHAR NOT NULL UNIQUE
 );
 
-La estructura verificada mediante \d users es:
+Estructura:
 
-Table "public.users"
-Column | Type | Nullable | Default
-id | uuid | not null |
-name | character varying | not null |
-email | character varying | not null |
+id | uuid | not null
+name | character varying | not null
+email | character varying | not null
 
 Índices:
 
 users_pkey PRIMARY KEY, btree (id)
 users_email_key UNIQUE CONSTRAINT, btree (email)
 
-DECISIONES SOBRE LA TABLA
+DECISIONES SOBRE TABLA
 
-La entidad User actual es:
+* id → UUID
+* id → PRIMARY KEY
+* name → NOT NULL
+* email → NOT NULL
+* email → UNIQUE
+* UUID lo genera Node/UsersService
+* PostgreSQL no genera UUID mediante DEFAULT
+* no tratamiento especial para mayúsculas/minúsculas de email
+* no created_at
+* no updated_at
+* no deleted_at
+* no version
+* no índices adicionales
+* no relaciones
+* no migraciones
+* no ORM
 
-id: string;
-name: string;
-email: string;
-
-Correspondencia PostgreSQL:
-
-id → UUID
-name → VARCHAR
-email → VARCHAR
-
-Restricciones:
-
-id → PRIMARY KEY
-name → NOT NULL
-email → NOT NULL UNIQUE
-
-El UUID lo genera Node/UsersService.
-
-PostgreSQL NO genera el UUID mediante DEFAULT.
-
-Se decidió que email debe ser UNIQUE desde el principio porque representa una invariante de persistencia razonable.
-
-Todavía NO se ha decidido ningún tratamiento especial para mayúsculas/minúsculas de email. Por ahora se utiliza el comportamiento normal de PostgreSQL.
-
-No se han añadido:
-
-* created_at
-* updated_at
-* deleted_at
-* version
-* índices adicionales
-* relaciones
-* migraciones
-* ORM
-
-No introducir estas cosas hasta que exista una necesidad real.
+No introducir estas cosas sin necesidad real.
 
 POSTGRES USER REPOSITORY
 
-Ya existe:
+Existe:
 
 src/repositories/PostgresUserRepository.ts
 
-Implementa:
+Implementa UserRepository.
 
-UserRepository
-
-Recibe un Pool mediante constructor.
-
-La dependencia se inyecta así:
+Constructor:
 
 constructor(private pool: Pool) {}
 
-No importa directamente el pool desde postgres.ts.
+El Pool se inyecta manualmente desde app.ts.
 
-Esto se decidió porque app.ts es el Composition Root y estamos haciendo Dependency Injection manual.
+No se importa directamente el Pool desde postgres.ts.
 
-No se utiliza contenedor DI.
+No hay contenedor DI.
 
-Implementación conceptual actual:
+No hay factories.
 
-import { Pool } from "pg";
-import { User } from "../types/User.js";
-import { UserRepository } from "./UserRepository.js";
-
-export class PostgresUserRepository implements UserRepository {
-constructor(private pool: Pool) {}
+Implementación actual de save():
 
 async save(user: User): Promise<User> {
-const result = await this.pool.query<User>(
-`INSERT INTO users (id, name, email)
-VALUES ($1, $2, $3)
-RETURNING id, name, email`,
-[user.id, user.name, user.email]
-);
+  let result: QueryResult<User>;
 
-const savedUser = result.rows[0];
+  try {
+    result = await this.pool.query<User>(
+      `
+        INSERT INTO users (id, name, email)
+        VALUES ($1, $2, $3)
+        RETURNING id, name, email
+      `,
+      [user.id, user.name, user.email],
+    );
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "23505") {
+      throw new ConflictError("A unique constraint was violated");
+    }
 
-if (!savedUser) {
-throw new Error("User was inserted but could not be retrieved");
+    throw error;
+  }
+
+  const savedUser = result.rows[0];
+
+  if (!savedUser) {
+    throw new Error("User was inserted but could not be retrieved");
+  }
+
+  return savedUser;
 }
 
-return savedUser;
-}
+IMPORTANTE SOBRE EL MANEJO DE UNIQUE
 
-async findAll(): Promise<User[]> {
-const result = await this.pool.query<User>(
-`SELECT id, name, email
-FROM users`
-);
+Se probó realmente un email duplicado.
 
-return result.rows;
-}
+PostgreSQL/pg proporcionó:
 
-async findById(id: string): Promise<User | undefined> {
-const result = await this.pool.query<User>(
-`SELECT id, name, email
-FROM users
-WHERE id = $1`,
-[id]
-);
+code: "23505"
+constraint: "users_email_key"
+detail: "Key (email)=(...) already exists."
+table: "users"
 
-return result.rows[0];
-}
-}
+Decisión tomada:
 
-IMPORTANTE SOBRE LOS ERRORES DEL REPOSITORY
+Cualquier error PostgreSQL con code === "23505" se traduce a ConflictError.
 
-PostgresUserRepository NO conoce AppError.
-
-Si PostgreSQL lanza un error de persistencia:
-
-save()
-↓
-PostgreSQL error
-↓
-throw
-
-El repository deja propagarse el error.
-
-Si un INSERT correcto no devuelve ninguna fila mediante RETURNING, el repository lanza un Error genérico:
-
-throw new Error("User was inserted but could not be retrieved");
+No se limita únicamente a users_email_key.
 
 Motivo:
 
-* es una inconsistencia inesperada de infraestructura;
-* AppError contiene conceptos de aplicación/HTTP;
-* la capa de persistencia no debe conocer HTTP ni statusCode.
+En el futuro podrían existir otras restricciones UNIQUE y no queremos acoplar el mecanismo a email.
 
-Todavía NO hemos decidido cómo traducir los errores específicos de PostgreSQL, como una violación de UNIQUE, a errores de aplicación.
+Por ahora NO se introduce información sobre el atributo que produjo el conflicto.
 
-Esto es precisamente el siguiente problema que debemos estudiar.
+No se analiza el texto de error.
 
-PRUEBA AISLADA DEL REPOSITORY
+No se expone users_email_key al cliente.
 
-Existe:
+No se ha creado un type guard separado porque sería sobre-ingeniería para un único caso.
 
-services/users-service/scripts/test-postgres-repository.ts
+La traducción ocurre en PostgresUserRepository:
 
-Se utiliza para comprobar de forma aislada:
+PostgreSQL 23505
+↓
+ConflictError
+↓
+errorHandler
+↓
+HTTP 409
 
-* save()
-* findAll()
-* findById() existente
-* findById() inexistente
+El repository conoce el error técnico y lo traduce a un error de aplicación.
 
-La prueba genera UUID mediante:
+El errorHandler no conoce PostgreSQL.
 
-import { randomUUID } from "node:crypto";
+No se ha introducido información específica del atributo porque no existe todavía una necesidad real.
 
-Genera el usuario así:
+MENSAJE DEL CONFLICT ERROR
 
-const userId = randomUUID();
+Se decidió utilizar un mensaje genérico:
 
-const userToInsert: User = {
-id: userId,
-name: "Tester",
-email: `tester-${userId}@test.com`,
-};
+"A unique constraint was violated"
 
-La prueba utiliza await en todas las operaciones.
+No se utiliza:
 
-Se ejecuta mediante:
+"duplicate key value violates unique constraint..."
 
-node --env-file=.env --import=tsx scripts/test-postgres-repository.ts
+porque expondría detalles de infraestructura.
 
-Se verificó correctamente:
+Tampoco se utiliza todavía:
 
-save() → User
-findAll() → User[]
-findById(existing) → User
-findById(nonExisting) → undefined
+"Email already exists"
 
-También se comprobó que la persistencia es real porque los datos sobrevivieron a la ejecución del script.
+porque eso requeriría que la capa de persistencia decidiera un mensaje específico de la API y acoplaría el repository al campo concreto.
 
-Después se eliminaron explícitamente los usuarios de prueba:
+Si en el futuro necesitamos distinguir conflictos por campo, se diseñará entonces.
 
-DELETE FROM users WHERE email LIKE 'tester-%@test.com';
+PRUEBA HTTP DE UNIQUE
 
-La base quedó limpia.
+Se probó realmente:
 
-ESTADO ACTUAL DE APP.TS
+POST /users
 
-Antes:
+con un email que ya existía.
 
-const userRepository: UserRepository = new InMemoryUserRepository();
+Resultado:
 
-Ahora:
+HTTP/1.1 409 Conflict
+
+Body:
+
+{"message":"A unique constraint was violated"}
+
+Esto confirmó el flujo completo:
+
+POST /users
+↓
+UsersController
+↓
+UsersService
+↓
+PostgresUserRepository
+↓
+PostgreSQL
+↓
+23505
+↓
+ConflictError
+↓
+errorHandler
+↓
+HTTP 409
+
+La base de datos quedó posteriormente limpia.
+
+APP.TS
+
+app.ts ya utiliza PostgreSQL:
 
 const userRepository: UserRepository = new PostgresUserRepository(pool);
 
-Se importan:
+Imports:
 
 import pool from "./infrastructure/database/postgres.js";
 import { PostgresUserRepository } from "./repositories/PostgresUserRepository.js";
 
-El resto de app.ts no se modificó.
+No se ha modificado UsersService para introducir PostgreSQL.
 
-La composición actual es:
+No se ha modificado la API externa.
+
+COMPOSITION ROOT
+
+app.ts actúa como Composition Root.
+
+Flujo actual:
 
 Pool
 ↓
@@ -650,13 +828,15 @@ UsersController
 ↓
 Routes
 
-No se ha modificado UsersService para introducir PostgreSQL.
+Dependency Injection manual.
 
-No se ha modificado UsersController.
+No contenedor DI.
 
-No se han modificado las rutas.
+No factories.
 
-No se ha modificado la API externa.
+No capa adicional de configuración.
+
+No introducirlas sin necesidad.
 
 FLUJO HTTP ACTUAL
 
@@ -681,46 +861,6 @@ PostgresUserRepository
 pg Pool
 ↓
 PostgreSQL
-
-VERIFICACIÓN DE LA INTEGRACIÓN
-
-Después de cambiar app.ts se comprobó que la API sigue funcionando.
-
-Se verificó:
-
-* GET /users
-* POST /users
-* GET /users
-* GET /users/:id
-* persistencia después de reiniciar users-service
-
-Los usuarios sobreviven al reinicio del proceso porque ahora están almacenados en PostgreSQL.
-
-La API externa no cambió.
-
-ESTADO EXACTO ACTUAL
-
-La migración de users-service desde InMemoryUserRepository a PostgreSQL está TERMINADA.
-
-PostgreSQL está integrado en el flujo HTTP.
-
-InMemoryUserRepository sigue existiendo, pero ya no se utiliza desde app.ts.
-
-No hay Dockerfile para users-service todavía.
-
-No hay migraciones.
-
-No hay ORM.
-
-No hay contenedor DI.
-
-No hay factories.
-
-No hay capa adicional de configuración.
-
-No hay mapper entre filas y User porque actualmente las columnas coinciden directamente con User.
-
-No añadir estas abstracciones hasta que exista una necesidad clara.
 
 DECISIONES ARQUITECTÓNICAS YA TOMADAS
 
@@ -748,8 +888,8 @@ No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una 
 20. El repository no genera UUIDs.
 21. UsersService genera el UUID y construye User.
 22. Los errores de negocio, como usuario no encontrado, se deciden en el service.
-23. Los errores de persistencia se propagan desde el repository.
-24. AppError pertenece a la capa de aplicación y no debe introducirse en el repository.
+23. Los errores de persistencia se propagan desde el repository salvo traducciones explícitas ya decididas.
+24. AppError pertenece a la capa de aplicación y no debe introducirse indiscriminadamente en el repository.
 25. El repository recibe el Pool mediante inyección de dependencias.
 26. No se importa directamente el Pool dentro de PostgresUserRepository.
 27. El Pool se proporciona desde el Composition Root.
@@ -782,47 +922,96 @@ No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una 
 54. No introducir deep cloning mientras no exista una necesidad real.
 55. No introducir clases, patrones o capas simplemente porque sea posible.
 56. Mantener la arquitectura sencilla y comprensible.
+57. Las validaciones de entrada HTTP pertenecen al middleware.
+58. Las reglas que dependen del estado de la aplicación o base de datos no pertenecen al middleware.
+59. Se ha decidido utilizar Zod para la validación runtime del DTO.
+60. Zod será introducido de forma incremental, sin crear una arquitectura de validación innecesaria.
+61. El schema de Zod será la fuente de verdad del contrato runtime del CreateUserDto.
+62. Se pretende derivar CreateUserDto del schema para evitar duplicar reglas entre TypeScript y runtime.
 
-SIGUIENTE PASO EXACTO
+CONFIGURACIÓN
 
-El siguiente problema que debemos estudiar es el comportamiento ante un email duplicado.
+Se discutió si crear una capa de configuración para PostgreSQL.
 
-Actualmente existe esta restricción:
+Decisión provisional:
 
-email VARCHAR NOT NULL UNIQUE
+NO introducir todavía una capa config.
 
-Por tanto:
+Actualmente postgres.ts puede leer directamente process.env.
 
-POST /users
-↓
-UsersService
-↓
-PostgresUserRepository.save()
-↓
-INSERT
-↓
-email duplicado
-↓
-PostgreSQL lanza error de UNIQUE constraint
+No existe todavía un problema que justifique una abstracción de configuración.
 
-Todavía NO sabemos si la aplicación está tratando este error correctamente.
+No cambiar esto salvo que aparezca una necesidad real.
 
-El siguiente paso debe ser:
+ESTADO ACTUAL EXACTO
 
-1. Explicar qué ocurre actualmente cuando se intenta crear un usuario con un email ya existente.
-2. Hacerme pensar qué capa debería interpretar ese error.
-3. Explicar qué información proporciona PostgreSQL/pg sobre una violación de UNIQUE.
-4. Decidir si necesitamos un nuevo error de aplicación, probablemente relacionado con conflicto de datos.
-5. Decidir dónde debe hacerse la traducción del error.
-6. Solo después implementar el cambio mínimo necesario.
-7. Probarlo mediante HTTP.
-8. No anticipar todavía otros tipos de errores de PostgreSQL.
+users-service ya tiene:
 
-IMPORTANTE:
+* Express
+* TypeScript
+* ES Modules
+* tsx
+* asyncHandler
+* middleware de validación
+* AppError
+* NotFoundError
+* ConflictError
+* errorHandler global
+* UserRepository
+* InMemoryUserRepository
+* PostgresUserRepository
+* pg Pool
+* PostgreSQL en Docker
+* tabla users
+* persistencia real
+* Dependency Injection manual
+* Repository Pattern
+* manejo de UNIQUE mediante ConflictError
+* HTTP 409 probado correctamente
 
-No implementes directamente el manejo del error de email duplicado sin antes explicar el problema y hacerme razonar sobre la responsabilidad de cada capa.
+ZOD
 
-No avances a otros problemas hasta terminar este paso.
+La siguiente decisión tomada es introducir Zod.
+
+La implementación todavía está pendiente.
+
+El siguiente paso exacto acordado es:
+
+1. Comprobar si Zod ya fue instalado en services/users-service.
+2. Si no, ejecutar:
+   npm install zod
+3. Ejecutar:
+   npm run build
+4. Una vez confirmado que compila, explicar el diseño del schema.
+5. Crear el schema para CreateUserDto.
+6. Evitar duplicar la definición del tipo si podemos derivarlo del schema.
+7. Todavía NO modificar validateCreateUser hasta haber entendido y revisado el schema.
+8. Después integrar Zod en validateCreateUser.
+9. Probar mediante HTTP:
+   * request válida;
+   * name ausente;
+   * email ausente;
+   * name con tipo incorrecto;
+   * email con tipo incorrecto;
+   * valores vacíos si el schema los considera inválidos.
+10. No introducir todavía validaciones más complejas como longitudes, regex sofisticada, normalización de email o reglas dependientes de base de datos salvo que exista una razón explícita.
+
+MUY IMPORTANTE SOBRE EL SIGUIENTE PASO
+
+No empieces directamente escribiendo el schema.
+
+Primero explica:
+
+* qué objetivo tiene introducir Zod;
+* qué problema resuelve respecto al middleware actual;
+* por qué queremos que el schema sea la fuente de verdad;
+* qué significa derivar CreateUserDto del schema;
+* qué alternativas existen brevemente;
+* por qué Zod es suficiente para este proyecto.
+
+Después hazme participar en la decisión de las reglas concretas del schema.
+
+No avances al siguiente paso hasta que confirme que he terminado el actual.
 
 MANTENER SIEMPRE EL ENFOQUE DE MENTOR TÉCNICO
 
@@ -836,8 +1025,7 @@ MANTENER SIEMPRE EL ENFOQUE DE MENTOR TÉCNICO
 * No introducir tecnologías o patrones antes de que exista una necesidad clara.
 * Mantener la arquitectura sencilla y comprensible.
 * Recordar las decisiones anteriores para no deshacerlas accidentalmente.
-* Si una decisión anterior deja de ser adecuada debido a un nuevo requisito, explicar primero por qué ha cambiado la situación antes de modificarla.
-* Si detectas restos de una implementación anterior, señalarlos antes de avanzar.
+* Si detectas restos de una implementación anterior, señálalos antes de avanzar.
 * No realizar cambios adicionales fuera del paso actual.
 * No avanzar al siguiente paso hasta que confirme que he terminado el actual.
-* El punto exacto de continuación es el manejo del error producido por la restricción UNIQUE de email.
+* El punto exacto de continuación es la introducción de Zod para validar CreateUserDto.

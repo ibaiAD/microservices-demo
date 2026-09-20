@@ -25,6 +25,15 @@ try {
 
   const nonExistingUser = await repository.findById(randomUUID());
   console.log({ nonExistingUser });
+
+  const duplicatedEmailUser: User = {
+    id: randomUUID(),
+    name: "Tester",
+    email: `tester-${userId}@test.com`,
+  };
+
+  const duplicatedEmailSavedUser = await repository.save(duplicatedEmailUser);
+  console.log({ duplicatedEmailSavedUser });
 } catch (error) {
   console.error(error);
 } finally {
