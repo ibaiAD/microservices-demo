@@ -3,6 +3,7 @@ import { Router } from "express";
 import type { UsersController } from "../controllers/users.controller.js";
 import { validateCreateUser } from "../middlewares/validateCreateUser.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { validateUserId } from "../middlewares/validateUserId.js";
 
 export function createUsersRoutes(usersController: UsersController) {
   const router = Router();
@@ -18,6 +19,7 @@ export function createUsersRoutes(usersController: UsersController) {
   );
   router.get(
     "/users/:id",
+    validateUserId,
     asyncHandler(usersController.getUser.bind(usersController)),
   );
 

@@ -1,15 +1,16 @@
 import type { NextFunction, Request, Response } from "express";
-import type { CreateUserDto } from "../types/user.js";
+import { CreateUserSchema } from "../types/user.js";
 
 export function validateCreateUser(
   req: Request,
   res: Response,
   next: NextFunction,
 ) {
-  const user: CreateUserDto = req.body;
-  if (!user.name || !user.email) {
+  const result = CreateUserSchema.safeParse(req.body);
+  if (!result.success) {
     return res.status(400).json({
-      error: "name and email are required",
+      error: "Invalid request body",
+      details: result.error.issues,
     });
   }
 
