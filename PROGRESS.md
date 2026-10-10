@@ -89,6 +89,7 @@ Los demás microservicios todavía no son el foco.
 - Axios para comunicación HTTP entre servicios
 - UUID para generación de IDs
 - Zod para validación runtime de datos de entrada
+- Vitest para unit testing
 
 No introducir nuevas tecnologías salvo que exista una necesidad clara.
 
@@ -121,6 +122,9 @@ Actualmente `users-service` dispone de:
 - Repository Pattern
 - manejo de UNIQUE mediante `ConflictError`
 - HTTP 409 probado correctamente
+- Vitest como herramienta de unit testing
+- script `test` con `vitest run`
+- tests unitarios de `UsersService.getUserById` en `tests/UsersService.test.ts`
 
 El proyecto continúa deliberadamente sencillo.
 
@@ -145,6 +149,9 @@ scripts/
 ├── test-postgres.ts
 ├── test-postgres-repository.ts
 └── create-users-table.sql
+
+tests/
+└── UsersService.test.ts
 ```
 
 La estructura puede evolucionar cuando exista una necesidad real, pero no se deben crear carpetas, capas o abstracciones anticipadamente.
@@ -1128,6 +1135,9 @@ No volver a cuestionar innecesariamente estas decisiones salvo que aparezca una 
 63. La validación del parámetro `id` de `GET /users/:id` pertenece al middleware.
 64. La existencia del usuario pertenece al service/repository, no al middleware.
 65. El controller no debe asumir que los tipos de TypeScript validan `req.body` o `req.params` en runtime.
+66. Se utiliza Vitest para unit testing en `users-service`.
+67. Los unit tests de `UsersService` aíslan el service mediante mock de `UserRepository`.
+68. `getUserById` ya está cubierto (usuario inexistente → `NotFoundError`, usuario existente → retorna usuario).
 
 ---
 
@@ -1302,6 +1312,25 @@ Mantener los mismos principios arquitectónicos utilizados hasta ahora:
 
 ---
 
+# TESTING - ESTADO ACTUAL
+
+Se ha introducido Vitest como herramienta de unit testing en `users-service`.
+
+Estado:
+
+- `vitest` en `devDependencies`;
+- script `test` con `vitest run`;
+- `tests/UsersService.test.ts` testea `UsersService.getUserById` aislado del repository mediante mock de `UserRepository`;
+- casos cubiertos:
+  - usuario inexistente (`findById` → `undefined`) → `NotFoundError`;
+  - usuario existente → retorna el usuario;
+- pendiente: testear `UsersService.createUser`.
+
+No se ha cambiado producción para introducir testing.
+No se ha introducido todavía integration / HTTP testing.
+
+---
+
 # REGLA FUNDAMENTAL DEL PROYECTO
 
 El objetivo principal sigue siendo aprender arquitectura de microservicios.
@@ -1357,15 +1386,18 @@ users-service
 │   └── Zod
 │
 └── Testing
-    └── siguiente fase
+    ├── Vitest + `tests/UsersService.test.ts` (`getUserById`)
+    └── siguiente: `createUser`
 ```
 
 ---
 
 # PUNTO DE CONTINUACIÓN ACTUAL
 
-**Introducir testing en `users-service`.**
+**Testear `UsersService.createUser` con unit test.**
+
+`getUserById` ya está cubierto en `tests/UsersService.test.ts`.
 
 No avanzar todavía a otros microservicios ni a Kafka, API Gateway, Dockerización del servicio, migraciones, ORM u otras piezas de infraestructura.
 
-El siguiente paso debe comenzar explicando **qué queremos conseguir con testing en este proyecto y qué tipo de test tiene sentido introducir primero**, antes de instalar herramientas o escribir código.
+El siguiente paso mantiene el service aislado mediante mock de `UserRepository`, sin introducir integration / HTTP testing todavía.
